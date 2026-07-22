@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "boundary-deadline-003",
+  "contentVersion": 1,
+  "title": "管理交付时间预期",
+  "objective": "条件发生变化时，能够及时说明影响并重新确认可兑现的交付时间",
+  "skill": "boundary-communication",
+  "difficulty": "L3",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "边界沟通 · 交付变化",
+      "title": "范围变了，时间却没变",
+      "context": "你原本承诺周三交付一个基础版本。周二评审后，对方新增了两项重要需求，但仍默认周三可以完整交付。按新范围，最快需要到周五。",
+      "question": "你会怎样更新交付预期？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "wait-until-late",
+          "text": "我先做着看，周三来不及再和你说。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "对方会继续按周三完整交付安排后续工作，直到最后一刻才知道变化。",
+            "strength": "暂时避免了当下的分歧。",
+            "risk": "延迟暴露风险会压缩双方调整方案的空间。",
+            "condition": "仅适合影响极小且当天就能完成评估的短暂确认期。"
+          }
+        },
+        {
+          "id": "announce-delay",
+          "text": "需求增加了，周三肯定做不完，只能周五给。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方知道时间会变化，但可能觉得这是单方面宣布延期。",
+            "strength": "及时说出了新范围无法按原时间完成。",
+            "risk": "没有说明具体影响，也没有提供保留原节点的替代方案。",
+            "condition": "适合交付时间已经由双方授权你直接调整的场景。"
+          }
+        },
+        {
+          "id": "reset-expectation",
+          "text": "评审新增的两项需求会增加约两天工作量。周三可以先交付原定基础版本，完整版本周五提供，你希望采用这个安排吗？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能理解变化原因、节点影响和可以选择的交付方案。",
+            "strength": "连接了范围变化、时间影响和分阶段交付方案。",
+            "risk": "两天的估算仍需要基于实际工作量，并在出现新风险时继续更新。",
+            "condition": "适合范围变化后仍可通过分阶段交付保留关键节点的场景。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "越早更新预期，越有调整空间",
+      "comparisonLabel": "比较另外两种表达"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "条件变化时重新承诺",
+      "summary": "把范围或依赖的变化与时间影响说清楚，再提供新的可兑现节点和必要的替代方案。",
+      "formula": "变化事实 + 时间影响 + 新交付方案",
+      "counterexample": "我尽量还是周三做完，来不及再说。",
+      "example": "新增需求会增加约两天工作量。周三先交基础版本，完整版本周五提供，可以按这个方案推进吗？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "换你来更新预期",
+      "prompt": "关键资料比约定时间晚到一天，原定明早提交的报告将受影响。请写一句话更新交付安排。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "state-change",
+          "title": "说明条件变化",
+          "description": "指出资料、范围或依赖发生了什么变化。",
+          "keywords": ["资料", "晚到", "延迟", "变化", "由于"]
+        },
+        {
+          "id": "explain-impact",
+          "title": "说明时间影响",
+          "description": "把变化与原交付时间受到的影响连接起来。",
+          "keywords": ["影响", "无法", "来不及", "延期", "时间"]
+        },
+        {
+          "id": "offer-delivery",
+          "title": "给出新交付方案",
+          "description": "提供可以兑现的新时间或分阶段交付方式。",
+          "keywords": ["明天", "下午", "先交", "补齐", "提供"]
+        }
+      ],
+      "referenceAnswer": "由于关键资料晚到一天，明早无法完成全部报告。我可以明早先交已确认部分，完整版本明天下午补齐，可以吗？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "交付预期练习完成",
+      "summary": "你练习了在条件变化后及时重建一个双方都能依赖的交付承诺。",
+      "takeaway": "变化发生时别等到最后：说明事实、解释影响、给出新方案。"
+    }
+  ]
+}

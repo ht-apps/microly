@@ -17,7 +17,7 @@ packages/
 └── content-schema/ # 基于 Zod 的训练内容共享契约
 ```
 
-小程序已包含第一组“拒绝临时任务”本地训练闭环；API 和运营后台仍为 Hello World 工程。API 已安装 Zod、Drizzle ORM 和 PostgreSQL 驱动，但尚未配置数据库连接、Schema 或迁移。
+小程序已包含“边界沟通”本地课程，提供拒绝临时任务、协商任务优先级和管理交付时间预期三组训练，以及今日调度、课程进度和单组重练；API 和运营后台仍为 Hello World 工程。API 已安装 Zod、Drizzle ORM 和 PostgreSQL 驱动，但尚未配置数据库连接、Schema 或迁移。
 
 ## 环境要求
 
@@ -94,7 +94,7 @@ pnpm test
 pnpm typecheck
 ```
 
-训练内容由 `@microly/content-schema` 在运行时校验；训练进度和主动表达只保存在当前设备，不会上传到服务端。
+训练目录和每组内容由 `@microly/content-schema` 在运行时分别校验；单组无效不会阻塞其他训练。训练进度和主动表达按训练组保存在当前设备，不会上传到服务端。
 
 ## 产品文档
 

@@ -1,3 +1,3 @@
 export default definePageConfig({
-  navigationBarTitleText: '拒绝临时任务'
+  navigationBarTitleText: '技能训练'
 })

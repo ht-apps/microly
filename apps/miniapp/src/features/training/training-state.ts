@@ -130,6 +130,10 @@ export function transitionTraining(
       return withUpdatedAt({
         ...progress,
         choiceConfirmed: true,
+        currentCardIndex: Math.min(
+          progress.currentCardIndex + 1,
+          session.cards.length - 1,
+        ),
       }, now)
     }
     case 'NEXT': {
@@ -324,8 +328,21 @@ export function parseTrainingProgress(
     }
   }
 
+  const parsedProgress = value as unknown as TrainingProgress
+
+  // 兼容旧版“已确认但仍停留在选择卡”的中间状态。
+  if (parsedProgress.currentCardIndex === 1 && parsedProgress.choiceConfirmed) {
+    return {
+      progress: {
+        ...parsedProgress,
+        currentCardIndex: 2,
+      },
+      recoveredFromInvalid: false,
+    }
+  }
+
   return {
-    progress: value as unknown as TrainingProgress,
+    progress: parsedProgress,
     recoveredFromInvalid: false,
   }
 }

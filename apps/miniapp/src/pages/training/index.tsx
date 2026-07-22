@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
-import Taro from '@tarojs/taro'
+import Taro, { useRouter } from '@tarojs/taro'
 
 import {
-  firstTrainingResult,
-  firstTrainingSession,
-} from '../../data/first-training'
+  getFirstAvailableTraining,
+  getTrainingEntry,
+  getTrainingSession,
+} from '../../data/training-content'
 import TrainingCardRenderer from '../../features/training/TrainingCardRenderer'
 import {
   transitionTraining,
@@ -20,26 +21,36 @@ import {
 import './index.scss'
 
 export default function TrainingPage() {
+  const router = useRouter()
+  const requestedSessionId = router.params.sessionId
+  const fallbackSession = getFirstAvailableTraining()
+  const session = requestedSessionId
+    ? getTrainingSession(requestedSessionId)
+    : fallbackSession
+  const requestedEntry = requestedSessionId
+    ? getTrainingEntry(requestedSessionId)
+    : undefined
   const [progress, setProgress] = useState<TrainingProgress | null>(() =>
-    firstTrainingSession
-      ? readTrainingProgress(firstTrainingSession).progress
+    session
+      ? readTrainingProgress(session).progress
       : null,
   )
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
 
   useEffect(() => {
-    if (!firstTrainingSession) {
+    if (!session) {
       return
     }
 
-    const stored = readTrainingProgress(firstTrainingSession)
+    Taro.setNavigationBarTitle({ title: session.title })
+    const stored = readTrainingProgress(session)
     setRecoveredFromInvalid(stored.recoveredFromInvalid)
 
     const nextProgress = stored.progress.status === 'not_started'
       ? transitionTraining(
           stored.progress,
-          firstTrainingSession,
+          session,
           { type: 'START' },
         )
       : stored.progress
@@ -48,14 +59,12 @@ export default function TrainingPage() {
     if (!writeTrainingProgress(nextProgress)) {
       setStorageWarning(true)
     }
-  }, [])
+  }, [session])
 
   const applyAction = (action: TrainingAction) => {
-    if (!firstTrainingSession) {
+    if (!session) {
       return
     }
-
-    const session = firstTrainingSession
 
     setProgress((current) => {
       if (!current) {
@@ -82,13 +91,18 @@ export default function TrainingPage() {
     }
   }
 
-  if (!firstTrainingSession || !firstTrainingResult.success || !progress) {
+  if (!session || !progress) {
+    const errorBody = requestedEntry?.error
+      ?? (requestedSessionId
+        ? '没有找到这组训练，请从课程页重新进入。'
+        : '当前没有可用的训练内容。')
+
     return (
       <View className='training-page training-page--centered'>
         <View className='training-error'>
           <Text className='card-eyebrow'>内容暂时不可用</Text>
           <Text className='card-title'>训练内容没有通过校验</Text>
-          <Text className='training-error__body'>我们没有加载未经验证的内容。</Text>
+          <Text className='training-error__body'>{errorBody}</Text>
           <Button className='training-primary-button' onClick={backHome}>
             返回首页
           </Button>
@@ -98,14 +112,14 @@ export default function TrainingPage() {
   }
 
   const progressPercent =
-    ((progress.currentCardIndex + 1) / firstTrainingSession.cards.length) * 100
+    ((progress.currentCardIndex + 1) / session.cards.length) * 100
 
   return (
     <View className='training-page'>
       <View className='training-toolbar'>
         <Button className='exit-button' onClick={backHome}>退出</Button>
         <Text className='training-toolbar__step'>
-          {progress.currentCardIndex + 1} / {firstTrainingSession.cards.length}
+          {progress.currentCardIndex + 1} / {session.cards.length}
         </Text>
       </View>
       <View className='progress-track'>
@@ -124,7 +138,7 @@ export default function TrainingPage() {
       )}
 
       <TrainingCardRenderer
-        session={firstTrainingSession}
+        session={session}
         progress={progress}
         onAction={applyAction}
         onBackHome={backHome}

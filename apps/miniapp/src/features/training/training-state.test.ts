@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { firstTrainingSession } from '../../data/first-training'
+import { getTrainingSession } from '../../data/training-content'
 import {
   createInitialProgress,
   parseTrainingProgress,
   transitionTraining,
 } from './training-state'
+
+const firstTrainingSession = getTrainingSession('boundary-decline-001')
 
 if (!firstTrainingSession) {
   throw new Error('测试训练内容应当通过 Schema 校验')
@@ -48,7 +50,7 @@ describe('training state', () => {
     expect(blocked.status).toBe('not_started')
   })
 
-  it('确认选择前不能前进，确认后不能改选项', () => {
+  it('确认选择前不能前进，确认后直接进入反馈且不能改选项', () => {
     const choice = reachChoice()
     const blocked = transitionTraining(choice, session, { type: 'NEXT' }, timestamp)
     const selected = transitionTraining(choice, session, {
@@ -65,6 +67,7 @@ describe('training state', () => {
 
     expect(blocked.currentCardIndex).toBe(1)
     expect(confirmed.choiceConfirmed).toBe(true)
+    expect(confirmed.currentCardIndex).toBe(2)
     expect(changed.selectedOptionId).toBe('direct-refusal')
   })
 
@@ -75,7 +78,6 @@ describe('training state', () => {
       optionId: 'constructive-boundary',
     }, timestamp)
     progress = transitionTraining(progress, session, { type: 'CONFIRM_CHOICE' }, timestamp)
-    progress = transitionTraining(progress, session, { type: 'NEXT' }, timestamp)
     const expanded = transitionTraining(progress, session, {
       type: 'TOGGLE_OTHER_FEEDBACK',
     }, timestamp)
@@ -130,6 +132,22 @@ describe('parseTrainingProgress', () => {
 
     expect(parsed.recoveredFromInvalid).toBe(false)
     expect(parsed.progress.currentCardIndex).toBe(1)
+  })
+
+  it('将旧版已确认的选择卡进度迁移到反馈页', () => {
+    let progress = reachChoice()
+    progress = transitionTraining(progress, session, {
+      type: 'SELECT_OPTION',
+      optionId: 'constructive-boundary',
+    }, timestamp)
+
+    const parsed = parseTrainingProgress({
+      ...progress,
+      choiceConfirmed: true,
+    }, session)
+
+    expect(parsed.recoveredFromInvalid).toBe(false)
+    expect(parsed.progress.currentCardIndex).toBe(2)
   })
 
   it('损坏数据和旧内容版本会安全重置', () => {

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "boundary-priority-002",
+  "contentVersion": 1,
+  "title": "协商任务优先级",
+  "objective": "同时面对多项紧急任务时，能够呈现冲突并请负责人明确取舍",
+  "skill": "boundary-communication",
+  "difficulty": "L2",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "边界沟通 · 多任务冲突",
+      "title": "这两件事都要今天完成",
+      "context": "你正在处理领导上午确认的紧急客户方案，下午同一位领导又要求你今天完成一份数据分析。按现有时间，两项任务无法同时保证质量。",
+      "question": "你会怎么确认优先级？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "silent-overtime",
+          "text": "好的，我晚上加班把两件事都做完。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "对方可能认为两项任务都能按原标准完成，不知道资源已经冲突。",
+            "strength": "表达了积极配合的态度。",
+            "risk": "隐藏了时间和质量风险，也让后续延期变得突然。",
+            "condition": "只有工作量已经评估清楚且确实能够兑现时，才适合直接承诺。"
+          }
+        },
+        {
+          "id": "push-back",
+          "text": "我手上事情太多了，这个今天肯定做不了。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方能意识到你有负荷，但仍不知道具体冲突和如何取舍。",
+            "strength": "及时暴露了无法同时完成的事实。",
+            "risk": "只陈述困难，没有把决策所需的信息摆出来。",
+            "condition": "适合对方已掌握全部任务背景、只需快速确认无法追加的场景。"
+          }
+        },
+        {
+          "id": "surface-tradeoff",
+          "text": "我正在完成上午确认的客户方案。如果数据分析也要今天交付，两项都会压缩检查时间。您希望我先保证哪一项？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能看见任务冲突、质量影响，并获得一个明确的决策问题。",
+            "strength": "呈现了现有承诺、取舍影响和需要确认的优先级。",
+            "risk": "确认后还需要补充两项任务各自可交付的时间。",
+            "condition": "适合优先级应由任务负责人决定的多任务冲突。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "把任务冲突变成可做的决定",
+      "comparisonLabel": "比较另外两种表达"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "呈现取舍，而不是独自硬扛",
+      "summary": "说明已经承诺的任务，讲清新增任务带来的影响，再请有决策权的人确认优先顺序。",
+      "formula": "现有承诺 + 冲突影响 + 优先级问题",
+      "counterexample": "好的，我尽量把两件事都做完。",
+      "example": "我正在完成上午确认的客户方案。两项都今天交付会压缩检查时间，您希望我先保证哪一项？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "换你来确认",
+      "prompt": "两个项目负责人都要求你在今天下班前完成各自的修改，请写一句话向直属领导确认优先级。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "state-commitment",
+          "title": "说明现有任务",
+          "description": "让对方知道当前已经承诺或正在处理什么。",
+          "keywords": ["正在", "目前", "已经", "手上"]
+        },
+        {
+          "id": "surface-impact",
+          "title": "呈现冲突影响",
+          "description": "说明同时处理会影响时间、范围或质量。",
+          "keywords": ["同时", "冲突", "来不及", "质量", "时间"]
+        },
+        {
+          "id": "ask-priority",
+          "title": "请求明确取舍",
+          "description": "请有决策权的人确认先做哪一项。",
+          "keywords": ["优先", "先做", "哪一项", "确认"]
+        }
+      ],
+      "referenceAnswer": "我目前正在处理 A 项目的修改，两项都在今天完成会影响检查质量。请帮我确认优先级，我先保证哪一项？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "优先级协商完成",
+      "summary": "你练习了如何把多任务压力转化为负责人可以判断的取舍。",
+      "takeaway": "不要隐藏冲突：摆出现有承诺、说明影响、请求明确优先级。"
+    }
+  ]
+}

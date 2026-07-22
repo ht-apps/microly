@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "catalogId": "boundary-communication",
+  "contentVersion": 1,
+  "title": "边界沟通",
+  "skill": "boundary-communication",
+  "description": "通过三个递进的真实职场情景，练习说明边界、协商优先级和管理交付预期。",
+  "sessionIds": [
+    "boundary-decline-001",
+    "boundary-priority-002",
+    "boundary-deadline-003"
+  ]
+}

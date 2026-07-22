@@ -2,94 +2,64 @@ import { useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
-import {
-  firstTrainingResult,
-  firstTrainingSession,
-} from '../../data/first-training'
+import { trainingContent } from '../../data/training-content'
+import { createCourseOverview } from '../../features/training/training-scheduler'
 import {
   transitionTraining,
   type TrainingProgress,
 } from '../../features/training/training-state'
 import {
-  clearTrainingProgress,
-  readTrainingProgress,
+  readAllTrainingProgress,
   writeTrainingProgress,
 } from '../../features/training/training-storage'
 
 import './index.scss'
 
+function readHomeSnapshot() {
+  const stored = readAllTrainingProgress(trainingContent.sessions)
+  return {
+    overview: createCourseOverview(
+      trainingContent.entries,
+      stored.progressBySessionId,
+    ),
+    recoveredSessionIds: stored.recoveredSessionIds,
+  }
+}
+
 export default function Index() {
-  const [progress, setProgress] = useState<TrainingProgress | null>(() =>
-    firstTrainingSession
-      ? readTrainingProgress(firstTrainingSession).progress
-      : null,
-  )
-  const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false)
+  const [snapshot, setSnapshot] = useState(readHomeSnapshot)
 
   useDidShow(() => {
-    if (!firstTrainingSession) {
-      return
-    }
-
-    const stored = readTrainingProgress(firstTrainingSession)
-    setProgress(stored.progress)
-    setRecoveredFromInvalid(stored.recoveredFromInvalid)
+    setSnapshot(readHomeSnapshot())
   })
 
+  const openCourse = () => Taro.navigateTo({ url: '/pages/course/index' })
+
   const openTraining = async () => {
-    if (!firstTrainingSession || !progress) {
+    const item = snapshot.overview.activeItem
+    if (!item?.session || !item.progress) {
       return
     }
 
-    const nextProgress = transitionTraining(
-      progress,
-      firstTrainingSession,
+    const nextProgress: TrainingProgress = transitionTraining(
+      item.progress,
+      item.session,
       { type: 'START' },
     )
     writeTrainingProgress(nextProgress)
-    setProgress(nextProgress)
-    await Taro.navigateTo({ url: '/pages/training/index' })
-  }
-
-  const restartTraining = async () => {
-    if (!firstTrainingSession || !progress) {
-      return
-    }
-
-    const result = await Taro.showModal({
-      title: '重新训练？',
-      content: '当前完成记录会被清除，并从第一个情景重新开始。',
-      confirmText: '重新开始',
-      confirmColor: '#5b5bd6',
+    setSnapshot(readHomeSnapshot())
+    await Taro.navigateTo({
+      url: `/pages/training/index?sessionId=${item.session.sessionId}`,
     })
-
-    if (!result.confirm) {
-      return
-    }
-
-    clearTrainingProgress()
-    const resetProgress = transitionTraining(
-      progress,
-      firstTrainingSession,
-      { type: 'RESET' },
-    )
-    const startedProgress = transitionTraining(
-      resetProgress,
-      firstTrainingSession,
-      { type: 'START' },
-    )
-    writeTrainingProgress(startedProgress)
-    setProgress(startedProgress)
-    await Taro.navigateTo({ url: '/pages/training/index' })
   }
 
-  if (!firstTrainingSession || !firstTrainingResult.success || !progress) {
+  if (!trainingContent.catalog || trainingContent.sessions.length === 0) {
     return (
       <View className='home-page home-page--centered'>
         <View className='error-card'>
           <Text className='error-card__eyebrow'>内容暂时不可用</Text>
-          <Text className='error-card__title'>这组训练没有通过内容校验</Text>
-          <Text className='error-card__body'>请重新加载，或稍后再试。</Text>
+          <Text className='error-card__title'>训练目录没有通过校验</Text>
+          <Text className='error-card__body'>我们没有加载未经验证的内容，请稍后重试。</Text>
           <Button
             className='secondary-button'
             onClick={() => Taro.reLaunch({ url: '/pages/index/index' })}
@@ -101,8 +71,10 @@ export default function Index() {
     )
   }
 
-  const isCompleted = progress.status === 'completed'
-  const isInProgress = progress.status === 'in_progress'
+  const { overview, recoveredSessionIds } = snapshot
+  const activeItem = overview.activeItem
+  const activeSession = activeItem?.session
+  const isInProgress = activeItem?.status === 'in_progress'
 
   return (
     <View className='home-page'>
@@ -112,62 +84,90 @@ export default function Index() {
         <Text className='home-hero__subtitle'>每天 3 分钟，把知道变成会用。</Text>
       </View>
 
-      {recoveredFromInvalid && (
+      {recoveredSessionIds.length > 0 && (
         <View className='notice-banner'>
-          本地进度无法读取，已为你安全重置。
+          部分本地进度无法读取，已为你安全重置。
         </View>
       )}
 
-      <View className={`today-card ${isCompleted ? 'today-card--completed' : ''}`}>
-        <View className='today-card__topline'>
-          <Text className='today-card__label'>今日 3 分钟</Text>
-          <Text className='today-card__duration'>约 {firstTrainingSession.estimatedMinutes} 分钟</Text>
+      {trainingContent.errors.length > 0 && (
+        <View className='notice-banner'>
+          有 {trainingContent.errors.length} 组内容暂不可用，其他训练仍可继续。
         </View>
+      )}
 
-        <Text className='today-card__title'>{firstTrainingSession.title}</Text>
-        <Text className='today-card__objective'>{firstTrainingSession.objective}</Text>
-
-        <View className='skill-row'>
-          <Text className='skill-chip'>边界沟通</Text>
-          <Text className='skill-chip'>真实情景</Text>
-          <Text className='skill-chip'>主动练习</Text>
-        </View>
-
-        {isCompleted ? (
-          <View className='completed-actions'>
-            <View className='completion-note'>
-              <Text className='completion-note__icon'>✓</Text>
-              <View>
-                <Text className='completion-note__title'>今天的训练已完成</Text>
-                <Text className='completion-note__body'>事实 + 优先级 + 可兑现的下一步</Text>
-              </View>
-            </View>
-            <Button className='primary-button' onClick={openTraining}>
-              查看完成总结
-            </Button>
-            <Button className='text-button' onClick={restartTraining}>
-              重新训练
-            </Button>
+      {overview.allCompleted ? (
+        <View className='today-card today-card--completed'>
+          <View className='today-card__topline'>
+            <Text className='today-card__label'>章节已完成</Text>
+            <Text className='today-card__duration'>{overview.availableCount} 组训练</Text>
           </View>
-        ) : (
+          <Text className='today-card__title'>边界沟通训练完成</Text>
+          <Text className='today-card__objective'>
+            你已经练习了说明边界、协商优先级和管理交付预期。
+          </Text>
+          <View className='completion-note completion-note--chapter'>
+            <Text className='completion-note__icon'>✓</Text>
+            <View>
+              <Text className='completion-note__title'>
+                本章 {overview.completedCount}/{overview.availableCount} 已完成
+              </Text>
+              <Text className='completion-note__body'>可以查看总结或重新练习任意一组</Text>
+            </View>
+          </View>
+          <Button className='primary-button' onClick={openCourse}>
+            查看全部训练
+          </Button>
+        </View>
+      ) : activeSession && activeItem?.progress ? (
+        <View className='today-card'>
+          <View className='today-card__topline'>
+            <Text className='today-card__label'>
+              {isInProgress ? '继续训练' : '下一组训练'}
+            </Text>
+            <Text className='today-card__duration'>约 {activeSession.estimatedMinutes} 分钟</Text>
+          </View>
+
+          <Text className='today-card__title'>{activeSession.title}</Text>
+          <Text className='today-card__objective'>{activeSession.objective}</Text>
+
+          <View className='skill-row'>
+            <Text className='skill-chip'>边界沟通</Text>
+            <Text className='skill-chip'>真实情景</Text>
+            <Text className='skill-chip'>主动练习</Text>
+          </View>
+
           <Button className='primary-button' onClick={openTraining}>
             {isInProgress
-              ? `继续练习 · ${progress.currentCardIndex + 1}/${firstTrainingSession.cards.length}`
+              ? `继续练习 · ${activeItem.progress.currentCardIndex + 1}/${activeSession.cards.length}`
               : '开始今天的 3 分钟'}
           </Button>
-        )}
-      </View>
-
-      <View className='week-card'>
-        <View>
-          <Text className='week-card__label'>本周进度</Text>
-          <Text className='week-card__value'>{isCompleted ? '1' : '0'} / 3 天</Text>
+          <Button className='text-button' onClick={openCourse}>
+            查看全部训练
+          </Button>
         </View>
-        <View className='week-dots'>
-          {[0, 1, 2, 3, 4, 5, 6].map((day) => (
+      ) : (
+        <View className='error-card'>
+          <Text className='error-card__title'>暂时找不到下一组训练</Text>
+          <Text className='error-card__body'>请进入课程页查看内容状态。</Text>
+          <Button className='secondary-button' onClick={openCourse}>
+            查看全部训练
+          </Button>
+        </View>
+      )}
+
+      <View className='chapter-card'>
+        <View>
+          <Text className='chapter-card__label'>{trainingContent.catalog.title}</Text>
+          <Text className='chapter-card__value'>
+            本章进度 {overview.completedCount} / {overview.availableCount}
+          </Text>
+        </View>
+        <View className='chapter-dots'>
+          {overview.items.map((item) => (
             <View
-              key={day}
-              className={`week-dot ${day === 0 && isCompleted ? 'week-dot--done' : ''}`}
+              key={item.sessionId}
+              className={`chapter-dot chapter-dot--${item.status.replace('_', '-')}`}
             />
           ))}
         </View>

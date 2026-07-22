@@ -7,14 +7,19 @@ import {
   type TrainingProgress,
 } from './training-state'
 
-export const TRAINING_STORAGE_KEY =
-  'microly:training:boundary-decline-001:v1'
+export function getTrainingStorageKey(
+  session: Pick<TrainingSession, 'sessionId' | 'contentVersion'>,
+) {
+  return `microly:training:${session.sessionId}:v${session.contentVersion}`
+}
 
 export function readTrainingProgress(
   session: TrainingSession,
 ): ParsedTrainingProgress {
   try {
-    const storedValue = Taro.getStorageSync<unknown>(TRAINING_STORAGE_KEY)
+    const storedValue = Taro.getStorageSync<unknown>(
+      getTrainingStorageKey(session),
+    )
     return parseTrainingProgress(storedValue, session)
   } catch {
     return {
@@ -26,18 +31,42 @@ export function readTrainingProgress(
 
 export function writeTrainingProgress(progress: TrainingProgress) {
   try {
-    Taro.setStorageSync(TRAINING_STORAGE_KEY, progress)
+    Taro.setStorageSync(getTrainingStorageKey(progress), progress)
     return true
   } catch {
     return false
   }
 }
 
-export function clearTrainingProgress() {
+export function clearTrainingProgress(
+  session: Pick<TrainingSession, 'sessionId' | 'contentVersion'>,
+) {
   try {
-    Taro.removeStorageSync(TRAINING_STORAGE_KEY)
+    Taro.removeStorageSync(getTrainingStorageKey(session))
     return true
   } catch {
     return false
   }
+}
+
+export interface TrainingProgressCollection {
+  progressBySessionId: Record<string, TrainingProgress>
+  recoveredSessionIds: string[]
+}
+
+export function readAllTrainingProgress(
+  sessions: TrainingSession[],
+): TrainingProgressCollection {
+  const progressBySessionId: Record<string, TrainingProgress> = {}
+  const recoveredSessionIds: string[] = []
+
+  sessions.forEach((session) => {
+    const stored = readTrainingProgress(session)
+    progressBySessionId[session.sessionId] = stored.progress
+    if (stored.recoveredFromInvalid) {
+      recoveredSessionIds.push(session.sessionId)
+    }
+  })
+
+  return { progressBySessionId, recoveredSessionIds }
 }

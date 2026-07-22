@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { firstTrainingSession } from '../../data/first-training'
+import { getTrainingSession } from '../../data/training-content'
 import { evaluatePractice } from './practice-evaluation'
 import { getPracticeCard } from './training-state'
+
+const firstTrainingSession = getTrainingSession('boundary-decline-001')
 
 if (!firstTrainingSession) {
   throw new Error('测试训练内容应当通过 Schema 校验')

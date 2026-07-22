@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { TrainingSessionSchema } from './index'
+import { TrainingCatalogSchema, TrainingSessionSchema } from './index'
 
 const validSession = {
   schemaVersion: '1.0',
@@ -135,5 +135,36 @@ describe('TrainingSessionSchema', () => {
     session.cards[4].minLength = 201
 
     expect(TrainingSessionSchema.safeParse(session).success).toBe(false)
+  })
+})
+
+describe('TrainingCatalogSchema', () => {
+  const catalog = {
+    schemaVersion: '1.0',
+    catalogId: 'boundary-communication',
+    contentVersion: 1,
+    title: '边界沟通',
+    skill: 'boundary-communication',
+    description: '通过三个递进情景练习清晰地说明边界与下一步。',
+    sessionIds: [
+      'boundary-decline-001',
+      'boundary-priority-002',
+      'boundary-deadline-003',
+    ],
+  } as const
+
+  it('接受合法的有序训练目录', () => {
+    expect(TrainingCatalogSchema.safeParse(catalog).success).toBe(true)
+  })
+
+  it('拒绝重复或为空的训练 ID', () => {
+    expect(TrainingCatalogSchema.safeParse({
+      ...catalog,
+      sessionIds: ['boundary-decline-001', 'boundary-decline-001'],
+    }).success).toBe(false)
+    expect(TrainingCatalogSchema.safeParse({
+      ...catalog,
+      sessionIds: [],
+    }).success).toBe(false)
   })
 })
