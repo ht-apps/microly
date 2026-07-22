@@ -5,6 +5,20 @@ page {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-button::after {
+.microly-button {
+  box-sizing: border-box;
+}
+
+.microly-button::after {
   border: 0;
+}
+
+.microly-button--compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  overflow: hidden;
+  line-height: 1;
 }

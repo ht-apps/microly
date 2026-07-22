@@ -53,6 +53,7 @@
 }
 
 .today-card,
+.home-review-card,
 .chapter-card,
 .error-card {
   background: rgba(255, 255, 255, 0.94);
@@ -200,6 +201,56 @@
   justify-content: space-between;
   margin-top: 24px;
   padding: 26px 30px;
+}
+
+.home-review-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 24px;
+  padding: 26px 30px;
+}
+
+.home-review-card__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-review-card__label,
+.home-review-card__title,
+.home-review-card__body {
+  display: block;
+}
+
+.home-review-card__label {
+  color: #a2711f;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.home-review-card__title {
+  margin-top: 8px;
+  color: #343a4e;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.home-review-card__body {
+  margin-top: 6px;
+  color: #7e8290;
+  font-size: 20px;
+}
+
+.home-review-card__button {
+  flex: 0 0 auto;
+  min-width: 148px;
+  height: 70px;
+  padding: 0 20px;
+  color: #5b5bd6;
+  background: #efeeff;
+  border-radius: 18px;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .chapter-card__label,

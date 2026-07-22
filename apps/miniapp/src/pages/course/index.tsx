@@ -3,6 +3,8 @@ import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
+import { formatReviewDate } from '../../features/review/review-state'
+import { readReviewSnapshot } from '../../features/review/review-snapshot'
 import {
   createCourseOverview,
   type CourseItem,
@@ -27,12 +29,15 @@ const statusLabels: Record<CourseItemStatus, string> = {
 
 function readCourseSnapshot() {
   const stored = readAllTrainingProgress(trainingContent.sessions)
+  const reviews = readReviewSnapshot()
   return {
     overview: createCourseOverview(
       trainingContent.entries,
       stored.progressBySessionId,
     ),
     recoveredSessionIds: stored.recoveredSessionIds,
+    reviewOverview: reviews.overview,
+    reviewWarning: reviews.recoveredFromInvalid || reviews.writeFailed,
   }
 }
 
@@ -98,7 +103,10 @@ export default function CoursePage() {
         <View className='course-error'>
           <Text className='course-error__title'>课程内容暂时不可用</Text>
           <Text className='course-error__body'>训练目录没有通过校验，请稍后再试。</Text>
-          <Button className='course-secondary-button' onClick={() => Taro.navigateBack()}>
+          <Button
+            className='microly-button course-secondary-button'
+            onClick={() => Taro.navigateBack()}
+          >
             返回今日
           </Button>
         </View>
@@ -106,7 +114,12 @@ export default function CoursePage() {
     )
   }
 
-  const { overview, recoveredSessionIds } = snapshot
+  const {
+    overview,
+    recoveredSessionIds,
+    reviewOverview,
+    reviewWarning,
+  } = snapshot
 
   return (
     <View className='course-page'>
@@ -127,12 +140,21 @@ export default function CoursePage() {
       {recoveredSessionIds.length > 0 && (
         <View className='course-notice'>部分本地进度损坏，已安全重置。</View>
       )}
+      {reviewWarning && (
+        <View className='course-notice'>部分旧复习数据无法读取，已安全整理。</View>
+      )}
 
       <View className='course-list'>
         {overview.items.map((item, index) => {
           const statusClass = item.status.replace('_', '-')
           const title = item.session?.title ?? `第 ${index + 1} 组训练`
           const objective = item.session?.objective ?? item.error ?? '内容暂不可用'
+          const dueReview = reviewOverview.dueItems.find(
+            (entry) => entry.item.sessionId === item.sessionId,
+          )
+          const upcomingReview = reviewOverview.upcomingItems.find(
+            (entry) => entry.item.sessionId === item.sessionId,
+          )
 
           return (
             <View
@@ -151,10 +173,17 @@ export default function CoursePage() {
                 </View>
                 <Text className='course-item__title'>{title}</Text>
                 <Text className='course-item__objective'>{objective}</Text>
+                {(dueReview || upcomingReview) && (
+                  <View className={`course-review-badge ${dueReview ? 'course-review-badge--due' : ''}`}>
+                    {dueReview
+                      ? '待复习'
+                      : `${formatReviewDate(upcomingReview?.item.dueAt as string)}复习`}
+                  </View>
+                )}
 
                 {(item.status === 'not_started' || item.status === 'in_progress') && (
                   <Button
-                    className='course-primary-button'
+                    className='microly-button course-primary-button'
                     onClick={() => openItem(item)}
                   >
                     {item.status === 'in_progress' ? '继续练习' : '开始训练'}
@@ -164,13 +193,13 @@ export default function CoursePage() {
                 {item.status === 'completed' && (
                   <View className='course-item__actions'>
                     <Button
-                      className='course-primary-button'
+                      className='microly-button course-primary-button'
                       onClick={() => openItem(item)}
                     >
                       查看总结
                     </Button>
                     <Button
-                      className='course-text-button'
+                      className='microly-button course-text-button'
                       onClick={() => restartItem(item)}
                     >
                       重新训练

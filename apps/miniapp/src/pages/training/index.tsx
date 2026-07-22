@@ -6,7 +6,12 @@ import {
   getFirstAvailableTraining,
   getTrainingEntry,
   getTrainingSession,
+  trainingContent,
 } from '../../data/training-content'
+import {
+  readReviewQueue,
+  upsertCompletedTrainingReview,
+} from '../../features/review/review-storage'
 import TrainingCardRenderer from '../../features/training/TrainingCardRenderer'
 import {
   transitionTraining,
@@ -37,6 +42,7 @@ export default function TrainingPage() {
   )
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
+  const [reviewDueAt, setReviewDueAt] = useState<string | null>(null)
 
   useEffect(() => {
     if (!session) {
@@ -56,6 +62,12 @@ export default function TrainingPage() {
       : stored.progress
 
     setProgress(nextProgress)
+    const storedReviews = readReviewQueue(trainingContent.sessions)
+    if (storedReviews.recoveredFromInvalid) setStorageWarning(true)
+    const existingReview = storedReviews.items.find(
+      (item) => item.sessionId === session.sessionId,
+    )
+    setReviewDueAt(existingReview?.dueAt ?? null)
     if (!writeTrainingProgress(nextProgress)) {
       setStorageWarning(true)
     }
@@ -78,6 +90,19 @@ export default function TrainingPage() {
       )
       if (nextProgress !== current && !writeTrainingProgress(nextProgress)) {
         setStorageWarning(true)
+      }
+      if (
+        action.type === 'COMPLETE'
+        && current.status !== 'completed'
+        && nextProgress.status === 'completed'
+      ) {
+        const review = upsertCompletedTrainingReview(
+          trainingContent.sessions,
+          session,
+          nextProgress,
+        )
+        setReviewDueAt(review.item?.dueAt ?? null)
+        if (review.writeFailed) setStorageWarning(true)
       }
       return nextProgress
     })
@@ -103,7 +128,7 @@ export default function TrainingPage() {
           <Text className='card-eyebrow'>内容暂时不可用</Text>
           <Text className='card-title'>训练内容没有通过校验</Text>
           <Text className='training-error__body'>{errorBody}</Text>
-          <Button className='training-primary-button' onClick={backHome}>
+          <Button className='microly-button training-primary-button' onClick={backHome}>
             返回首页
           </Button>
         </View>
@@ -117,7 +142,7 @@ export default function TrainingPage() {
   return (
     <View className='training-page'>
       <View className='training-toolbar'>
-        <Button className='exit-button' onClick={backHome}>退出</Button>
+        <Button className='microly-button exit-button' onClick={backHome}>退出</Button>
         <Text className='training-toolbar__step'>
           {progress.currentCardIndex + 1} / {session.cards.length}
         </Text>
@@ -142,6 +167,7 @@ export default function TrainingPage() {
         progress={progress}
         onAction={applyAction}
         onBackHome={backHome}
+        reviewDueAt={reviewDueAt}
       />
     </View>
   )

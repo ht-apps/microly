@@ -513,3 +513,45 @@
   background: #f1f0ff;
   text-align: left;
 }
+
+.review-scheduled {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+  padding: 22px;
+  color: #7d5f1e;
+  background: #fff4d9;
+  border-radius: 20px;
+  text-align: left;
+}
+
+.review-scheduled__icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  color: #fff;
+  background: #c99024;
+  border-radius: 50%;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.review-scheduled__title,
+.review-scheduled__body {
+  display: block;
+}
+
+.review-scheduled__title {
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.review-scheduled__body {
+  margin-top: 6px;
+  font-size: 21px;
+  line-height: 1.5;
+}

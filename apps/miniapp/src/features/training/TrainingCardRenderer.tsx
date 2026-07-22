@@ -17,6 +17,7 @@ interface TrainingCardRendererProps {
   progress: TrainingProgress
   onAction: (action: TrainingAction) => void
   onBackHome: () => void
+  reviewDueAt?: string | null
 }
 
 const ratingMeta: Record<
@@ -123,6 +124,7 @@ export default function TrainingCardRenderer({
   progress,
   onAction,
   onBackHome,
+  reviewDueAt,
 }: TrainingCardRendererProps) {
   const card = session.cards[progress.currentCardIndex]
 
@@ -141,7 +143,7 @@ export default function TrainingCardRenderer({
             <Text>{card.question}</Text>
           </View>
           <Button
-            className='training-primary-button'
+            className='microly-button training-primary-button'
             onClick={() => onAction({ type: 'NEXT' })}
           >
             开始判断
@@ -161,7 +163,7 @@ export default function TrainingCardRenderer({
               return (
                 <Button
                   key={option.id}
-                  className={`choice-option ${isSelected ? 'choice-option--selected' : ''} ${isLocked ? 'choice-option--locked' : ''}`}
+                  className={`microly-button choice-option ${isSelected ? 'choice-option--selected' : ''} ${isLocked ? 'choice-option--locked' : ''}`}
                   aria-disabled={isLocked}
                   onClick={() => {
                     if (!isLocked) {
@@ -182,7 +184,7 @@ export default function TrainingCardRenderer({
           </View>
           {!progress.choiceConfirmed ? (
             <Button
-              className='training-primary-button'
+              className='microly-button training-primary-button'
               disabled={!progress.selectedOptionId}
               onClick={() => onAction({ type: 'CONFIRM_CHOICE' })}
             >
@@ -190,7 +192,7 @@ export default function TrainingCardRenderer({
             </Button>
           ) : (
             <Button
-              className='training-primary-button'
+              className='microly-button training-primary-button'
               onClick={() => onAction({ type: 'NEXT' })}
             >
               查看反馈
@@ -214,7 +216,7 @@ export default function TrainingCardRenderer({
           <Text className='card-title'>{card.title}</Text>
           {selectedOption && <FeedbackDetail option={selectedOption} />}
           <Button
-            className='compare-button'
+            className='microly-button compare-button'
             onClick={() => onAction({ type: 'TOGGLE_OTHER_FEEDBACK' })}
           >
             {progress.otherFeedbackExpanded ? '收起其他表达' : card.comparisonLabel}
@@ -227,7 +229,7 @@ export default function TrainingCardRenderer({
             </View>
           )}
           <Button
-            className='training-primary-button'
+            className='microly-button training-primary-button'
             onClick={() => onAction({ type: 'NEXT' })}
           >
             提炼表达原则
@@ -255,7 +257,7 @@ export default function TrainingCardRenderer({
             <Text className='example-card__text'>{card.example}</Text>
           </View>
           <Button
-            className='training-primary-button'
+            className='microly-button training-primary-button'
             onClick={() => onAction({ type: 'NEXT' })}
           >
             换你来回答
@@ -292,7 +294,7 @@ export default function TrainingCardRenderer({
           )}
           {!progress.practiceEvaluation ? (
             <Button
-              className='training-primary-button'
+              className='microly-button training-primary-button'
               disabled={!canSubmit}
               onClick={() => onAction({ type: 'SUBMIT_PRACTICE' })}
             >
@@ -302,7 +304,7 @@ export default function TrainingCardRenderer({
             <>
               <PracticeEvaluation card={card} progress={progress} />
               <Button
-                className='training-primary-button'
+                className='microly-button training-primary-button'
                 onClick={() => onAction({ type: 'COMPLETE' })}
               >
                 完成今天的训练
@@ -347,7 +349,18 @@ export default function TrainingCardRenderer({
             <Text className='takeaway-card__label'>带走这一句</Text>
             <Text className='takeaway-card__text'>{card.takeaway}</Text>
           </View>
-          <Button className='training-primary-button' onClick={onBackHome}>
+          {reviewDueAt && (
+            <View className='review-scheduled'>
+              <Text className='review-scheduled__icon'>↻</Text>
+              <View className='review-scheduled__content'>
+                <Text className='review-scheduled__title'>已加入错题复习</Text>
+                <Text className='review-scheduled__body'>
+                  下一次复习已安排，回到今日页可以查看。
+                </Text>
+              </View>
+            </View>
+          )}
+          <Button className='microly-button training-primary-button' onClick={onBackHome}>
             回到今日
           </Button>
         </View>
