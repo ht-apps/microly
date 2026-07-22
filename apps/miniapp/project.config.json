@@ -2,7 +2,7 @@
   "miniprogramRoot": "./dist",
   "projectname": "microly",
   "description": "一款面向碎片时间的 AI 微学习小程序",
-  "appid": "touristappid",
+  "appid": "wx9d6257e9091fdc92",
   "setting": {
     "urlCheck": true,
     "es6": false,

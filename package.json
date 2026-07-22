@@ -15,7 +15,9 @@
     "dev:admin": "pnpm --filter @microly/admin dev",
     "build:miniapp": "pnpm --filter @microly/miniapp build:weapp",
     "build:api": "pnpm --filter @microly/api build",
-    "build:admin": "pnpm --filter @microly/admin build"
+    "build:admin": "pnpm --filter @microly/admin build",
+    "test": "pnpm --recursive --if-present test",
+    "typecheck": "pnpm --recursive --if-present typecheck"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

@@ -1,0 +1,250 @@
+.home-page {
+  min-height: 100vh;
+  padding: 52px 32px 72px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 95% 3%, rgba(126, 107, 255, 0.16), transparent 30%),
+    #fffaf2;
+}
+
+.home-page--centered {
+  display: flex;
+  align-items: center;
+}
+
+.home-hero {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 42px;
+}
+
+.brand-mark,
+.error-card__eyebrow {
+  color: #5b5bd6;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+
+.home-hero__title {
+  margin-top: 20px;
+  color: #17213b;
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -1px;
+}
+
+.home-hero__subtitle {
+  margin-top: 16px;
+  color: #6f7485;
+  font-size: 28px;
+  line-height: 1.5;
+}
+
+.notice-banner {
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  color: #75581c;
+  background: #fff0c7;
+  border-radius: 18px;
+  font-size: 24px;
+  line-height: 1.45;
+}
+
+.today-card,
+.week-card,
+.error-card {
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(91, 91, 214, 0.1);
+  border-radius: 32px;
+  box-shadow: 0 20px 50px rgba(37, 34, 78, 0.09);
+}
+
+.today-card {
+  padding: 34px;
+}
+
+.today-card--completed {
+  border-color: rgba(54, 151, 121, 0.22);
+}
+
+.today-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.today-card__label,
+.week-card__label {
+  color: #5b5bd6;
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.today-card__duration {
+  color: #8a8e9c;
+  font-size: 22px;
+}
+
+.today-card__title {
+  display: block;
+  margin-top: 24px;
+  color: #17213b;
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.today-card__objective {
+  display: block;
+  margin-top: 16px;
+  color: #636879;
+  font-size: 26px;
+  line-height: 1.6;
+}
+
+.skill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 28px 0 32px;
+}
+
+.skill-chip {
+  padding: 10px 18px;
+  color: #5b5bd6;
+  background: #f0efff;
+  border-radius: 999px;
+  font-size: 21px;
+}
+
+.primary-button,
+.secondary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 92px;
+  border-radius: 24px;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 92px;
+}
+
+.primary-button {
+  color: #fff;
+  background: linear-gradient(135deg, #6964e8, #5652c9);
+  box-shadow: 0 16px 28px rgba(91, 91, 214, 0.22);
+}
+
+.secondary-button {
+  margin-top: 28px;
+  color: #5b5bd6;
+  background: #f0efff;
+}
+
+.text-button {
+  margin-top: 14px;
+  color: #717687;
+  background: transparent;
+  font-size: 24px;
+  line-height: 64px;
+}
+
+.completion-note {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 28px;
+  padding: 22px;
+  background: #eff9f4;
+  border-radius: 20px;
+}
+
+.completion-note__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  color: #fff;
+  background: #369779;
+  border-radius: 50%;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.completion-note__title,
+.completion-note__body {
+  display: block;
+}
+
+.completion-note__title {
+  color: #246f59;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.completion-note__body {
+  margin-top: 6px;
+  color: #568473;
+  font-size: 21px;
+}
+
+.week-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding: 26px 30px;
+}
+
+.week-card__label,
+.week-card__value {
+  display: block;
+}
+
+.week-card__value {
+  margin-top: 6px;
+  color: #7b8090;
+  font-size: 22px;
+}
+
+.week-dots {
+  display: flex;
+  gap: 10px;
+}
+
+.week-dot {
+  width: 18px;
+  height: 18px;
+  background: #e7e5df;
+  border-radius: 50%;
+}
+
+.week-dot--done {
+  background: #5b5bd6;
+  box-shadow: 0 0 0 7px rgba(91, 91, 214, 0.12);
+}
+
+.error-card {
+  width: 100%;
+  padding: 40px 34px;
+  box-sizing: border-box;
+}
+
+.error-card__title,
+.error-card__body {
+  display: block;
+}
+
+.error-card__title {
+  margin-top: 18px;
+  font-size: 36px;
+  font-weight: 700;
+}
+
+.error-card__body {
+  margin-top: 14px;
+  color: #717687;
+  font-size: 25px;
+}

@@ -13,9 +13,11 @@ apps/
 ├── miniapp/   # Taro 4 + React 微信小程序与 H5
 ├── api/       # Fastify + TypeScript API
 └── admin/     # Vite + React + TypeScript 运营后台
+packages/
+└── content-schema/ # 基于 Zod 的训练内容共享契约
 ```
 
-当前三个应用均为 Hello World 工程。API 已安装 Zod、Drizzle ORM 和 PostgreSQL 驱动，但尚未配置数据库连接、Schema 或迁移。
+小程序已包含第一组“拒绝临时任务”本地训练闭环；API 和运营后台仍为 Hello World 工程。API 已安装 Zod、Drizzle ORM 和 PostgreSQL 驱动，但尚未配置数据库连接、Schema 或迁移。
 
 ## 环境要求
 
@@ -42,6 +44,16 @@ pnpm dev:miniapp
 ```
 
 构建产物位于 `apps/miniapp/dist`。微信开发者工具应打开 `apps/miniapp` 目录。
+
+共享测试号 AppID 配置在 `apps/miniapp/project.config.json`，微信开发者工具打开 `apps/miniapp` 后会直接使用该测试号。
+
+小程序环境变量统一放在 `apps/miniapp`。如需临时切换 Taro 构建产物使用的 AppID，可创建不会被 Git 跟踪的 `apps/miniapp/.env.development.local`：
+
+```dotenv
+TARO_APP_ID=wx你的测试号AppID
+```
+
+修改后需要重新启动 `pnpm dev:miniapp`。`TARO_APP_ID` 会覆盖构建产物 `apps/miniapp/dist/project.config.json`，但不会改写受版本控制的外层 `project.config.json`；不要在前端环境文件中保存 AppSecret。
 
 ### 后端 API
 
@@ -74,6 +86,15 @@ pnpm build:miniapp
 pnpm build:api
 pnpm build:admin
 ```
+
+## 测试与类型检查
+
+```bash
+pnpm test
+pnpm typecheck
+```
+
+训练内容由 `@microly/content-schema` 在运行时校验；训练进度和主动表达只保存在当前设备，不会上传到服务端。
 
 ## 产品文档
 

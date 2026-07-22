@@ -26,5 +26,6 @@
     }
   },
   "include": ["./src", "./types", "./config"],
+  "exclude": ["./src/**/*.test.ts", "./src/**/*.test.tsx"],
   "compileOnSave": false
 }

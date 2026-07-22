@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "boundary-decline-001",
+  "contentVersion": 1,
+  "title": "拒绝临时任务",
+  "objective": "面对临时任务时，能够说明边界、确认优先级并给出替代方案",
+  "skill": "boundary-communication",
+  "difficulty": "L2",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "边界沟通 · 真实职场情景",
+      "title": "今晚能把材料做完吗？",
+      "context": "下班前，直属领导临时要求你今晚完成一份材料，但你已经有无法调整的重要安排。任务比较紧急，对方还没有说明哪些部分必须今晚交付。",
+      "question": "你会怎么回应？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "direct-refusal",
+          "text": "今晚不行，明天再说吧。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方能听懂你的边界，但可能觉得任务目标没有被承接。",
+            "strength": "直接说明了今晚无法完成。",
+            "risk": "没有确认紧急程度，也没有提供可执行的下一步。",
+            "condition": "适合已经多次确认过优先级、只需要重申边界的场景。"
+          }
+        },
+        {
+          "id": "vague-promise",
+          "text": "好的，我尽量今晚完成。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "对方可能把“尽量”理解成你已经承诺今晚交付。",
+            "strength": "表达了配合任务的意愿。",
+            "risk": "没有说明现实限制，也无法管理最终交付预期。",
+            "condition": "只有在你确实能承担延期风险、并会马上补充明确时间时才可使用。"
+          }
+        },
+        {
+          "id": "constructive-boundary",
+          "text": "我今晚已有无法调整的安排。可以先确认优先级，我先完成最关键的部分，其余明早补齐，可以吗？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "你说明了边界，同时继续承接任务目标。",
+            "strength": "包含现实限制、优先级确认和可兑现的替代方案。",
+            "risk": "如果任务涉及真正的紧急事故，仍需要进一步确认今晚的最小交付范围。",
+            "condition": "适合常规临时任务协商，不适用于安全事故或重大危机。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "看看这句话会带来什么",
+      "comparisonLabel": "比较另外两种表达"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "协商边界，不做模糊承诺",
+      "summary": "先说明客观限制，再确认对方真正需要的优先级，最后给出自己能够兑现的下一步。",
+      "formula": "事实 + 优先级 + 可兑现的下一步",
+      "counterexample": "好的，我尽量今晚完成。",
+      "example": "我今晚已有无法调整的安排。可以先确认优先级，我先完成最关键的部分，其余明早补齐，可以吗？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "换你来说",
+      "prompt": "同事下午才给出资料，却希望你今天下班前完成全部分析。请写一句回复。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "state-constraint",
+          "title": "说明现实边界",
+          "description": "让对方知道当前时间或安排上的客观限制。",
+          "keywords": ["已有安排", "无法", "不能", "时间"]
+        },
+        {
+          "id": "confirm-priority",
+          "title": "确认任务优先级",
+          "description": "先弄清今天真正必须交付的部分。",
+          "keywords": ["优先", "关键", "先"]
+        },
+        {
+          "id": "offer-next-step",
+          "title": "给出可执行下一步",
+          "description": "提出你能够兑现的时间或交付方案。",
+          "keywords": ["明早", "明天", "补齐", "先完成", "可以"]
+        }
+      ],
+      "referenceAnswer": "按目前资料，今天无法完成全部分析。我可以先输出最关键的结论，完整版本明天上午补齐，你希望我先处理哪一部分？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "今天的 3 分钟完成了",
+      "summary": "你练习了如何在说明边界的同时，继续承接任务目标。",
+      "takeaway": "拒绝模糊承诺：说明事实、确认优先级、给出下一步。"
+    }
+  ]
+}
