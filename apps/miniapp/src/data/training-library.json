@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "libraryId": "workplace-communication-foundations",
+  "contentVersion": 1,
+  "title": "职场沟通基础",
+  "description": "通过边界沟通、清晰汇报、表达异议和推动协作四个章节，练习可以马上使用的职场表达。",
+  "catalogIds": [
+    "boundary-communication",
+    "clear-reporting",
+    "constructive-disagreement",
+    "action-alignment"
+  ]
+}

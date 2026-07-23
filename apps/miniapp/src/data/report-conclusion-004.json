@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "report-conclusion-004",
+  "contentVersion": 1,
+  "title": "先说结论再补充进展",
+  "objective": "面对临时进度询问时，先给出结论，再补充关键进展和下一步",
+  "skill": "clear-reporting",
+  "difficulty": "L1",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "清晰汇报 · 临时进度询问",
+      "title": "项目现在到哪一步了？",
+      "context": "会议开始前，负责人临时询问项目进度。核心功能已经完成，但还有一处数据校验正在处理，对方只有一分钟了解情况。",
+      "question": "你会怎样快速汇报？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "vague-progress",
+          "text": "还在做，应该快了，有结果我再告诉你。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "对方知道工作尚未结束，但无法判断整体是否按计划推进。",
+            "strength": "表达了任务仍在处理。",
+            "risk": "缺少整体结论、关键进展和明确的下一次更新时间。",
+            "condition": "只适合对方已经掌握完整背景、仅需非常简短确认的场景。"
+          }
+        },
+        {
+          "id": "detail-first",
+          "text": "昨天先调了接口，后来发现字段格式有变化，今天又和数据同事确认了两次。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方听到了过程细节，但需要自己归纳当前状态。",
+            "strength": "提供了真实的工作过程。",
+            "risk": "细节先于结论，时间紧张时容易掩盖整体进度和风险。",
+            "condition": "适合对方明确要求了解排查过程，而不是只问整体状态时。"
+          }
+        },
+        {
+          "id": "conclusion-first",
+          "text": "整体按计划推进，核心功能已完成。还剩一处数据校验，预计今天下午处理完并同步结果。",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能先判断整体状态，再快速了解剩余事项和更新时间。",
+            "strength": "包含整体结论、关键进展和明确下一步。",
+            "risk": "如果数据校验可能影响上线，还需要主动补充风险范围。",
+            "condition": "适合常规进度询问和时间有限的汇报场景。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "让对方先听懂整体状态",
+      "comparisonLabel": "比较另外两种汇报"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "先给判断，再给依据",
+      "summary": "汇报先回答整体是否正常，再选择最关键的进展，并说明下一次可验证的动作或时间。",
+      "formula": "结论 + 关键进展 + 下一步",
+      "counterexample": "我先从昨天做了什么开始讲。",
+      "example": "整体按计划推进，核心功能已完成。剩余数据校验今天下午完成，之后同步结果。"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "用一分钟汇报",
+      "prompt": "负责人问活动页面是否可以按时上线。页面已完成，最终文案还在确认。请写一句汇报。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "state-conclusion",
+          "title": "先给整体结论",
+          "description": "先说明整体是否按计划推进。",
+          "keywords": ["整体", "目前", "可以", "按计划"]
+        },
+        {
+          "id": "key-progress",
+          "title": "说明关键进展",
+          "description": "点出已经完成或仍待处理的核心事项。",
+          "keywords": ["已完成", "完成", "还剩", "文案"]
+        },
+        {
+          "id": "clear-next-step",
+          "title": "给出下一步",
+          "description": "说明接下来动作或明确更新时间。",
+          "keywords": ["下一步", "今天", "下午", "确认后", "同步"]
+        }
+      ],
+      "referenceAnswer": "整体可以按计划上线，页面已经完成，目前只差最终文案确认。我会在今天下午确认后同步最终版本。",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "清晰汇报的第一步完成了",
+      "summary": "你练习了如何先给整体判断，再补充关键进展和下一步。",
+      "takeaway": "先说结论，让细节为结论服务。"
+    }
+  ]
+}

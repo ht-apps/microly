@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { TrainingCatalogSchema, TrainingSessionSchema } from './index'
+import {
+  TrainingCatalogSchema,
+  TrainingLibrarySchema,
+  TrainingSessionSchema,
+} from './index'
 
 const validSession = {
   schemaVersion: '1.0',
@@ -165,6 +169,37 @@ describe('TrainingCatalogSchema', () => {
     expect(TrainingCatalogSchema.safeParse({
       ...catalog,
       sessionIds: [],
+    }).success).toBe(false)
+  })
+})
+
+describe('TrainingLibrarySchema', () => {
+  const library = {
+    schemaVersion: '1.0',
+    libraryId: 'workplace-communication-foundations',
+    contentVersion: 1,
+    title: '职场沟通基础',
+    description: '通过四个递进章节练习常见职场沟通能力。',
+    catalogIds: [
+      'boundary-communication',
+      'clear-reporting',
+      'constructive-disagreement',
+      'action-alignment',
+    ],
+  } as const
+
+  it('接受合法的有序课程库', () => {
+    expect(TrainingLibrarySchema.safeParse(library).success).toBe(true)
+  })
+
+  it('拒绝重复或为空的目录 ID', () => {
+    expect(TrainingLibrarySchema.safeParse({
+      ...library,
+      catalogIds: ['clear-reporting', 'clear-reporting'],
+    }).success).toBe(false)
+    expect(TrainingLibrarySchema.safeParse({
+      ...library,
+      catalogIds: [],
     }).success).toBe(false)
   })
 })

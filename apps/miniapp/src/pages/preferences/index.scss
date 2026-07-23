@@ -1,0 +1,145 @@
+.preferences-page {
+  min-height: 100vh;
+  padding: 40px 30px 72px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(126, 107, 255, 0.14), transparent 30%),
+    #fffaf2;
+}
+
+.preferences-hero,
+.preferences-list {
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(91, 91, 214, 0.1);
+  border-radius: 28px;
+  box-shadow: 0 18px 46px rgba(37, 34, 78, 0.08);
+}
+
+.preferences-eyebrow,
+.preferences-title,
+.preferences-body {
+  display: block;
+}
+
+.preferences-eyebrow {
+  color: #5b5bd6;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.preferences-title {
+  margin-top: 16px;
+  color: #17213b;
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.preferences-body {
+  margin-top: 14px;
+  color: #707585;
+  font-size: 23px;
+  line-height: 1.6;
+}
+
+.preferences-notice {
+  margin-top: 22px;
+  padding: 18px 22px;
+  color: #75581c;
+  background: #fff0c7;
+  border-radius: 18px;
+  font-size: 21px;
+}
+
+.preferences-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 22px;
+}
+
+.preferences-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+  min-height: 116px;
+  margin: 0;
+  padding: 22px;
+  color: #34394a;
+  background: #faf9f6;
+  border: 2px solid #ebe8e2;
+  border-radius: 22px;
+  box-sizing: border-box;
+  text-align: left;
+  line-height: 1.5;
+}
+
+.preferences-option--selected {
+  color: #343479;
+  background: #f1f0ff;
+  border-color: #6c67e4;
+}
+
+.preferences-option__check {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  color: #fff;
+  background: #e9e6df;
+  border-radius: 50%;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.preferences-option--selected .preferences-option__check {
+  background: #5b5bd6;
+}
+
+.preferences-option__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.preferences-option__title,
+.preferences-option__body {
+  display: block;
+}
+
+.preferences-option__title {
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.preferences-option__body {
+  margin-top: 7px;
+  color: #747887;
+  font-size: 20px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.preferences-primary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  margin-top: 28px;
+  color: #fff;
+  background: linear-gradient(135deg, #6964e8, #5652c9);
+  border-radius: 22px;
+  font-size: 27px;
+  font-weight: 700;
+  line-height: 88px;
+}
+
+.preferences-text-button {
+  margin-top: 10px;
+  color: #717687;
+  background: transparent;
+  font-size: 22px;
+  line-height: 60px;
+}

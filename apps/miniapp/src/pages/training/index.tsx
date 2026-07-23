@@ -8,11 +8,20 @@ import {
   getTrainingSession,
   trainingContent,
 } from '../../data/training-content'
+import { createTrainingCompletedEvent } from '../../features/activity/activity-state'
+import { recordLearningActivity } from '../../features/activity/activity-storage'
+import { isSessionFavorite } from '../../features/favorite/favorite-state'
+import {
+  setSessionFavorite,
+  syncFavoriteQueue,
+} from '../../features/favorite/favorite-storage'
 import {
   readReviewQueue,
   upsertCompletedTrainingReview,
 } from '../../features/review/review-storage'
-import TrainingCardRenderer from '../../features/training/TrainingCardRenderer'
+import TrainingCardRenderer, {
+  CompletedTrainingReview,
+} from '../../features/training/TrainingCardRenderer'
 import {
   transitionTraining,
   type TrainingAction,
@@ -42,13 +51,19 @@ export default function TrainingPage() {
   )
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false)
   const [storageWarning, setStorageWarning] = useState(false)
+  const [favoriteStorageWarning, setFavoriteStorageWarning] = useState(false)
+  const [favoriteRecoveredFromInvalid, setFavoriteRecoveredFromInvalid] = useState(false)
+  const [isPrincipleFavorite, setIsPrincipleFavorite] = useState(false)
   const [reviewDueAt, setReviewDueAt] = useState<string | null>(null)
+  const [reviewCardIndex, setReviewCardIndex] = useState<number | null>(null)
+  const [activityStorageWarning, setActivityStorageWarning] = useState(false)
 
   useEffect(() => {
     if (!session) {
       return
     }
 
+    setReviewCardIndex(null)
     Taro.setNavigationBarTitle({ title: session.title })
     const stored = readTrainingProgress(session)
     setRecoveredFromInvalid(stored.recoveredFromInvalid)
@@ -62,6 +77,10 @@ export default function TrainingPage() {
       : stored.progress
 
     setProgress(nextProgress)
+    const storedFavorites = syncFavoriteQueue(trainingContent.sessions)
+    setIsPrincipleFavorite(isSessionFavorite(storedFavorites.items, session))
+    if (storedFavorites.recoveredFromInvalid) setFavoriteRecoveredFromInvalid(true)
+    if (storedFavorites.writeFailed) setFavoriteStorageWarning(true)
     const storedReviews = readReviewQueue(trainingContent.sessions)
     if (storedReviews.recoveredFromInvalid) setStorageWarning(true)
     const existingReview = storedReviews.items.find(
@@ -96,6 +115,18 @@ export default function TrainingPage() {
         && current.status !== 'completed'
         && nextProgress.status === 'completed'
       ) {
+        if (nextProgress.completedAt) {
+          const activity = recordLearningActivity(
+            trainingContent.sessions,
+            createTrainingCompletedEvent(
+              session.sessionId,
+              nextProgress.completedAt,
+            ),
+          )
+          if (activity.writeFailed || activity.recoveredFromInvalid) {
+            setActivityStorageWarning(true)
+          }
+        }
         const review = upsertCompletedTrainingReview(
           trainingContent.sessions,
           session,
@@ -108,13 +139,36 @@ export default function TrainingPage() {
     })
   }
 
-  const backHome = async () => {
-    try {
-      await Taro.navigateBack()
-    } catch {
-      await Taro.reLaunch({ url: '/pages/index/index' })
+  const toggleFavorite = () => {
+    if (!session) return
+    const nextValue = !isPrincipleFavorite
+    const result = setSessionFavorite(
+      trainingContent.sessions,
+      session,
+      nextValue,
+    )
+    if (result.writeFailed) {
+      setFavoriteStorageWarning(true)
+      return
     }
+    if (result.recoveredFromInvalid) setFavoriteRecoveredFromInvalid(true)
+    setFavoriteStorageWarning(false)
+    setIsPrincipleFavorite(result.isFavorite)
   }
+
+  const returnToEntry = async () => {
+    try {
+      if (Taro.getCurrentPages().length > 1) {
+        await Taro.navigateBack()
+        return
+      }
+    } catch {
+      // Fall through to the safe tab route.
+    }
+    await Taro.switchTab({ url: '/pages/index/index' })
+  }
+
+  const backToday = () => Taro.switchTab({ url: '/pages/index/index' })
 
   if (!session || !progress) {
     const errorBody = requestedEntry?.error
@@ -128,7 +182,7 @@ export default function TrainingPage() {
           <Text className='card-eyebrow'>内容暂时不可用</Text>
           <Text className='card-title'>训练内容没有通过校验</Text>
           <Text className='training-error__body'>{errorBody}</Text>
-          <Button className='microly-button training-primary-button' onClick={backHome}>
+          <Button className='microly-button training-primary-button' onClick={backToday}>
             返回首页
           </Button>
         </View>
@@ -136,15 +190,34 @@ export default function TrainingPage() {
     )
   }
 
-  const progressPercent =
-    ((progress.currentCardIndex + 1) / session.cards.length) * 100
+  const isReviewing = reviewCardIndex !== null
+  const visibleCardIndex = reviewCardIndex ?? progress.currentCardIndex
+  const visibleCardCount = isReviewing ? 5 : session.cards.length
+  const progressPercent = ((visibleCardIndex + 1) / visibleCardCount) * 100
+
+  const leaveReview = () => setReviewCardIndex(null)
+  const showPreviousReviewCard = () => {
+    setReviewCardIndex((current) => (
+      current === null ? null : Math.max(0, current - 1)
+    ))
+  }
+  const showNextReviewCard = () => {
+    setReviewCardIndex((current) => (
+      current === null || current >= 4 ? null : current + 1
+    ))
+  }
 
   return (
     <View className='training-page'>
       <View className='training-toolbar'>
-        <Button className='microly-button exit-button' onClick={backHome}>退出</Button>
+        <Button
+          className='microly-button exit-button'
+          onClick={isReviewing ? leaveReview : returnToEntry}
+        >
+          {isReviewing ? '退出回看' : '退出'}
+        </Button>
         <Text className='training-toolbar__step'>
-          {progress.currentCardIndex + 1} / {session.cards.length}
+          {isReviewing ? '回看 ' : ''}{visibleCardIndex + 1} / {visibleCardCount}
         </Text>
       </View>
       <View className='progress-track'>
@@ -154,21 +227,44 @@ export default function TrainingPage() {
         />
       </View>
 
-      {(recoveredFromInvalid || storageWarning) && (
+      {(recoveredFromInvalid
+        || storageWarning
+        || favoriteStorageWarning
+        || favoriteRecoveredFromInvalid
+        || activityStorageWarning) && (
         <View className='training-notice'>
-          {storageWarning
-            ? '当前进度暂时无法保存，请保持页面开启。'
-            : '旧的本地进度无法读取，已从头开始。'}
+          {activityStorageWarning
+            ? '本次学习已完成，但学习日记录暂时无法保存。'
+            : favoriteStorageWarning
+            ? '收藏暂时无法保存，其他训练内容不受影响。'
+            : favoriteRecoveredFromInvalid
+              ? '部分旧收藏无法读取，已安全整理。'
+            : storageWarning
+              ? '当前进度暂时无法保存，请保持页面开启。'
+              : '旧的本地进度无法读取，已从头开始。'}
         </View>
       )}
 
-      <TrainingCardRenderer
-        session={session}
-        progress={progress}
-        onAction={applyAction}
-        onBackHome={backHome}
-        reviewDueAt={reviewDueAt}
-      />
+      {reviewCardIndex !== null ? (
+        <CompletedTrainingReview
+          session={session}
+          progress={progress}
+          cardIndex={reviewCardIndex}
+          onPrevious={showPreviousReviewCard}
+          onNext={showNextReviewCard}
+        />
+      ) : (
+        <TrainingCardRenderer
+          session={session}
+          progress={progress}
+          onAction={applyAction}
+          onBackHome={backToday}
+          onStartReview={() => setReviewCardIndex(0)}
+          isPrincipleFavorite={isPrincipleFavorite}
+          onToggleFavorite={toggleFavorite}
+          reviewDueAt={reviewDueAt}
+        />
+      )}
     </View>
   )
 }

@@ -158,8 +158,19 @@
   background: #faf9f6;
   border: 2px solid #ebe8e2;
   border-radius: 22px;
+  box-sizing: border-box;
   text-align: left;
   line-height: 1.55;
+}
+
+.training-locked-notice {
+  margin-top: 20px;
+  padding: 16px 20px;
+  color: #75581c;
+  background: #fff4d8;
+  border-radius: 16px;
+  font-size: 21px;
+  line-height: 1.45;
 }
 
 .choice-option--selected {
@@ -274,6 +285,25 @@
   border-radius: 18px;
   font-size: 24px;
   line-height: 76px;
+}
+
+.favorite-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 78px;
+  margin-top: 26px;
+  color: #5b5bd6;
+  background: #f1f0ff;
+  border-radius: 20px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 78px;
+}
+
+.favorite-button--active {
+  color: #8a651c;
+  background: #fff0c7;
 }
 
 .other-feedback-list {
@@ -554,4 +584,64 @@
   margin-top: 6px;
   font-size: 21px;
   line-height: 1.5;
+}
+
+.training-previous-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: 64px;
+  margin: 14px auto 0;
+  padding: 0 20px;
+  color: #717687;
+  background: transparent;
+  font-size: 23px;
+  line-height: 64px;
+}
+
+.completion-review-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 78px;
+  margin-top: 16px;
+  color: #5b5bd6;
+  background: #f1f0ff;
+  border-radius: 20px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 78px;
+}
+
+.training-review-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.training-review-primary,
+.training-review-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 78px;
+  margin: 0;
+  border-radius: 20px;
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 78px;
+}
+
+.training-review-primary {
+  flex: 1;
+  color: #fff;
+  background: linear-gradient(135deg, #6964e8, #5652c9);
+}
+
+.training-review-secondary {
+  flex: 0 0 auto;
+  padding: 0 22px;
+  color: #5b5bd6;
+  background: #efeeff;
 }

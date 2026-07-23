@@ -3,6 +3,9 @@ import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
+import { readLearningActivitySnapshot } from '../../features/activity/activity-snapshot'
+import { createDueReviewAnsweredEvent } from '../../features/activity/activity-state'
+import { recordLearningActivity } from '../../features/activity/activity-storage'
 import {
   findTrainingOption,
   formatReviewDate,
@@ -25,6 +28,22 @@ export default function ReviewPage() {
   const [runItems, setRunItems] = useState<ResolvedReviewItem[]>([])
   const [runState, setRunState] = useState(createReviewRunState)
   const [storageWarning, setStorageWarning] = useState(false)
+  const [countedDueReviewCount, setCountedDueReviewCount] = useState(0)
+  const [activitySummary, setActivitySummary] = useState(
+    () => readLearningActivitySnapshot().summary,
+  )
+
+  const returnToEntry = async () => {
+    try {
+      if (Taro.getCurrentPages().length > 1) {
+        await Taro.navigateBack()
+        return
+      }
+    } catch {
+      // Fall through to the safe tab route.
+    }
+    await Taro.switchTab({ url: '/pages/index/index' })
+  }
 
   useDidShow(() => {
     if (view === 'overview') setSnapshot(readReviewSnapshot())
@@ -33,6 +52,7 @@ export default function ReviewPage() {
   const startReview = (items: ResolvedReviewItem[]) => {
     if (items.length === 0) return
     setRunItems(items)
+    setCountedDueReviewCount(0)
     setRunState(transitionReviewRun(
       createReviewRunState(),
       { type: 'START', itemCount: items.length },
@@ -48,16 +68,32 @@ export default function ReviewPage() {
       || !runState.selectedOptionId
       || runState.answerConfirmed
     ) return
+    const answeredAt = new Date().toISOString()
     const saved = saveReviewAnswer(
       trainingContent.sessions,
       activeEntry.item,
       activeEntry.session,
       runState.selectedOptionId,
+      answeredAt,
     )
     if (!saved.result) return
 
     if (saved.writeFailed || saved.recoveredFromInvalid) {
       setStorageWarning(true)
+    }
+    const activityEvent = createDueReviewAnsweredEvent(
+      activeEntry.item,
+      answeredAt,
+    )
+    if (activityEvent) {
+      const activity = recordLearningActivity(
+        trainingContent.sessions,
+        activityEvent,
+      )
+      setCountedDueReviewCount((count) => count + 1)
+      if (activity.writeFailed || activity.recoveredFromInvalid) {
+        setStorageWarning(true)
+      }
     }
     setRunState((state) => transitionReviewRun(state, {
       type: 'CONFIRM',
@@ -73,6 +109,7 @@ export default function ReviewPage() {
     }
 
     setSnapshot(readReviewSnapshot())
+    setActivitySummary(readLearningActivitySnapshot().summary)
     setView('summary')
   }
 
@@ -167,6 +204,9 @@ export default function ReviewPage() {
   }
 
   if (view === 'summary') {
+    const todayEffective = activitySummary.todayEffective
+      || countedDueReviewCount >= 2
+
     return (
       <View className='review-page review-page--centered'>
         <View className='review-summary'>
@@ -175,6 +215,16 @@ export default function ReviewPage() {
           <Text className='review-summary__body'>
             你完成了 {runItems.length} 题，其中 {runState.correctCount} 题选择了更推荐的表达。
           </Text>
+          <View className='review-activity-note'>
+            <Text className='review-activity-note__title'>
+              本次计入 {countedDueReviewCount} 道到期复习
+            </Text>
+            <Text className='review-activity-note__body'>
+              {todayEffective
+                ? '今天已形成一个有效学习日。'
+                : '同一天完成 2 道到期复习，可计入本周学习。'}
+            </Text>
+          </View>
           {snapshot.overview.nextDueAt && (
             <View className='review-next-date'>
               下一次复习：{formatReviewDate(snapshot.overview.nextDueAt)}
@@ -182,7 +232,7 @@ export default function ReviewPage() {
           )}
           <Button
             className='microly-button review-primary-button'
-            onClick={() => Taro.navigateBack()}
+            onClick={returnToEntry}
           >
             回到今日
           </Button>
@@ -222,7 +272,7 @@ export default function ReviewPage() {
           <Text className='review-empty__body'>训练中选择“不建议”的表达后，会在这里安排复习。</Text>
           <Button
             className='microly-button review-secondary-button'
-            onClick={() => Taro.navigateBack()}
+            onClick={returnToEntry}
           >
             返回今日
           </Button>
@@ -269,6 +319,9 @@ export default function ReviewPage() {
               </View>
             ))}
           </View>
+          <Text className='review-early-note'>
+            提前复习属于额外巩固，不计入本周有效学习日。
+          </Text>
         </View>
       )}
     </View>

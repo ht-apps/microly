@@ -1,71 +1,140 @@
 import { describe, expect, it } from 'vitest'
 
-import catalog from './boundary-catalog.json'
+import actionCatalog from './action-catalog.json'
+import actionFollowup from './action-followup-009.json'
+import actionOwner from './action-owner-010.json'
+import boundaryCatalog from './boundary-catalog.json'
 import deadline from './boundary-deadline-003.json'
 import decline from './boundary-decline-001.json'
 import priority from './boundary-priority-002.json'
+import disagreementCatalog from './disagreement-catalog.json'
+import disagreeAlternative from './disagree-alternative-008.json'
+import disagreeGoal from './disagree-goal-007.json'
+import reportingCatalog from './reporting-catalog.json'
+import reportConclusion from './report-conclusion-004.json'
+import reportRisk from './report-risk-005.json'
+import reportSupport from './report-support-006.json'
+import library from './training-library.json'
 import { loadTrainingContent } from './training-content'
+
+const catalogInputs: Record<string, unknown> = {
+  'boundary-communication': boundaryCatalog,
+  'clear-reporting': reportingCatalog,
+  'constructive-disagreement': disagreementCatalog,
+  'action-alignment': actionCatalog,
+}
 
 const sessionInputs: Record<string, unknown> = {
   'boundary-decline-001': decline,
   'boundary-priority-002': priority,
   'boundary-deadline-003': deadline,
+  'report-conclusion-004': reportConclusion,
+  'report-risk-005': reportRisk,
+  'report-support-006': reportSupport,
+  'disagree-goal-007': disagreeGoal,
+  'disagree-alternative-008': disagreeAlternative,
+  'action-followup-009': actionFollowup,
+  'action-owner-010': actionOwner,
 }
 
 describe('training content repository', () => {
-  it('按目录顺序加载三组合法训练', () => {
-    const repository = loadTrainingContent(catalog, sessionInputs)
+  it('按课程库顺序加载四章十组合法训练', () => {
+    const repository = loadTrainingContent(library, catalogInputs, sessionInputs)
 
-    expect(repository.catalog?.catalogId).toBe('boundary-communication')
-    expect(repository.sessions.map((session) => session.sessionId)).toEqual(
-      catalog.sessionIds,
-    )
+    expect(repository.library?.libraryId).toBe('workplace-communication-foundations')
+    expect(repository.chapters.map((chapter) => chapter.catalogId)).toEqual(library.catalogIds)
+    expect(repository.sessions).toHaveLength(10)
+    expect(repository.sessions.map((session) => session.sessionId)).toEqual([
+      ...boundaryCatalog.sessionIds,
+      ...reportingCatalog.sessionIds,
+      ...disagreementCatalog.sessionIds,
+      ...actionCatalog.sessionIds,
+    ])
     expect(repository.errors).toEqual([])
   })
 
-  it('隔离单组损坏内容并继续提供其他训练', () => {
-    const repository = loadTrainingContent(catalog, {
-      ...sessionInputs,
-      'boundary-priority-002': { invalid: true },
-    })
+  it('十组内容均包含完整评级与三个主动表达维度', () => {
+    const repository = loadTrainingContent(library, catalogInputs, sessionInputs)
 
-    expect(repository.sessions.map((session) => session.sessionId)).toEqual([
-      'boundary-decline-001',
-      'boundary-deadline-003',
-    ])
-    expect(repository.entries[1].session).toBeNull()
-    expect(repository.errors[0].sessionId).toBe('boundary-priority-002')
+    repository.sessions.forEach((session) => {
+      const choice = session.cards.find((card) => card.type === 'choice')
+      const practice = session.cards.find((card) => card.type === 'practice')
+      expect(choice?.options.map((option) => option.rating).sort()).toEqual([
+        'not_recommended',
+        'recommended',
+        'risky',
+      ])
+      expect(practice?.dimensions).toHaveLength(3)
+    })
   })
 
-  it('目录损坏时不加载未经目录校验的训练', () => {
-    const repository = loadTrainingContent({
-      ...catalog,
-      sessionIds: [],
+  it('隔离单组损坏内容并继续提供其他训练', () => {
+    const repository = loadTrainingContent(library, catalogInputs, {
+      ...sessionInputs,
+      'report-risk-005': { invalid: true },
+    })
+
+    expect(repository.sessions).toHaveLength(9)
+    expect(repository.entries.find(
+      (entry) => entry.sessionId === 'report-risk-005',
+    )?.session).toBeNull()
+    expect(repository.errors[0]).toMatchObject({
+      scope: 'session',
+      contentId: 'report-risk-005',
+    })
+  })
+
+  it('隔离单章损坏目录并继续加载后续章节', () => {
+    const repository = loadTrainingContent(library, {
+      ...catalogInputs,
+      'clear-reporting': { invalid: true },
     }, sessionInputs)
 
-    expect(repository.catalog).toBeNull()
+    expect(repository.chapters[1].catalog).toBeNull()
+    expect(repository.sessions).toHaveLength(7)
+    expect(repository.sessions.some(
+      (session) => session.sessionId === 'disagree-goal-007',
+    )).toBe(true)
+  })
+
+  it('课程库损坏时不加载未经目录校验的内容', () => {
+    const repository = loadTrainingContent({ ...library, catalogIds: [] }, catalogInputs, sessionInputs)
+
+    expect(repository.library).toBeNull()
     expect(repository.sessions).toEqual([])
     expect(repository.errors).toHaveLength(1)
   })
 
-  it('全部训练损坏时保留错误但不提供可用训练', () => {
-    const repository = loadTrainingContent(catalog, {})
-
-    expect(repository.catalog).not.toBeNull()
-    expect(repository.sessions).toEqual([])
-    expect(repository.errors).toHaveLength(3)
-  })
-
-  it('拒绝目录引用与内容 ID 不一致的训练', () => {
-    const repository = loadTrainingContent(catalog, {
+  it('拒绝目录、技能或内容 ID 不一致的训练', () => {
+    const repository = loadTrainingContent(library, {
+      ...catalogInputs,
+      'clear-reporting': { ...reportingCatalog, catalogId: 'other-reporting' },
+    }, {
       ...sessionInputs,
-      'boundary-priority-002': {
-        ...priority,
-        sessionId: 'boundary-other-002',
-      },
+      'boundary-priority-002': { ...priority, sessionId: 'boundary-other-002' },
+      'disagree-goal-007': { ...disagreeGoal, skill: 'other-skill' },
     })
 
-    expect(repository.entries[1].session).toBeNull()
-    expect(repository.entries[1].error).toBe('训练内容 ID 与目录不一致')
+    expect(repository.chapters[1].catalog).toBeNull()
+    expect(repository.entries.find(
+      (entry) => entry.sessionId === 'boundary-priority-002',
+    )?.error).toBe('训练内容 ID 与目录不一致')
+    expect(repository.entries.find(
+      (entry) => entry.sessionId === 'disagree-goal-007',
+    )?.error).toBe('训练内容技能与章节不一致')
+  })
+
+  it('拒绝跨章节重复训练 ID', () => {
+    const repository = loadTrainingContent(library, {
+      ...catalogInputs,
+      'clear-reporting': {
+        ...reportingCatalog,
+        sessionIds: ['boundary-decline-001', ...reportingCatalog.sessionIds.slice(1)],
+      },
+    }, sessionInputs)
+
+    const duplicated = repository.chapters[1].entries[0]
+    expect(duplicated.session).toBeNull()
+    expect(duplicated.error).toBe('训练 ID 在多个章节中重复')
   })
 })

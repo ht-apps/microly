@@ -32,77 +32,91 @@ function markCompleted(progress: TrainingProgress): TrainingProgress {
 }
 
 describe('training scheduler', () => {
-  it('首次只解锁第一组训练', () => {
+  it('首次只解锁第一组训练和第一章', () => {
     const overview = createCourseOverview(
-      trainingContent.entries,
+      trainingContent.chapters,
       progressMap(),
     )
 
-    expect(overview.items.map((item) => item.status)).toEqual([
+    expect(overview.items[0]?.status).toBe('not_started')
+    expect(overview.items.slice(1).every((item) => item.status === 'locked')).toBe(true)
+    expect(overview.chapters.map((chapter) => chapter.status)).toEqual([
       'not_started',
+      'locked',
       'locked',
       'locked',
     ])
     expect(overview.activeItem?.sessionId).toBe('boundary-decline-001')
   })
 
-  it('优先恢复进行中的训练', () => {
+  it('优先恢复任意章节中进行中的训练', () => {
     const progresses = progressMap()
-    const second = trainingContent.sessions[1]
-    if (!second) throw new Error('缺少第二组训练')
-    progresses[second.sessionId] = transitionTraining(
-      progresses[second.sessionId],
-      second,
+    const reporting = trainingContent.sessions.find(
+      (session) => session.sessionId === 'report-risk-005',
+    )
+    if (!reporting) throw new Error('缺少汇报训练')
+    progresses[reporting.sessionId] = transitionTraining(
+      progresses[reporting.sessionId],
+      reporting,
       { type: 'START' },
       timestamp,
     )
 
-    const overview = createCourseOverview(trainingContent.entries, progresses)
+    const overview = createCourseOverview(trainingContent.chapters, progresses)
 
-    expect(overview.activeItem?.sessionId).toBe(second.sessionId)
-    expect(overview.activeItem?.status).toBe('in_progress')
+    expect(overview.activeItem?.sessionId).toBe(reporting.sessionId)
+    expect(overview.activeChapter?.catalogId).toBe('clear-reporting')
   })
 
-  it('完成前一组后推进到下一组', () => {
+  it('完成现有三组后推进到清晰汇报首组', () => {
     const progresses = progressMap()
-    const first = trainingContent.sessions[0]
-    if (!first) throw new Error('缺少第一组训练')
-    progresses[first.sessionId] = markCompleted(progresses[first.sessionId])
-
-    const overview = createCourseOverview(trainingContent.entries, progresses)
-
-    expect(overview.completedCount).toBe(1)
-    expect(overview.items[1].status).toBe('not_started')
-    expect(overview.activeItem?.sessionId).toBe('boundary-priority-002')
-  })
-
-  it('不可用内容不会阻塞后续有效训练', () => {
-    const progresses = progressMap()
-    const first = trainingContent.sessions[0]
-    if (!first) throw new Error('缺少第一组训练')
-    progresses[first.sessionId] = markCompleted(progresses[first.sessionId])
-    const entries = trainingContent.entries.map((entry, index) => index === 1
-      ? { ...entry, session: null, error: '内容损坏' }
-      : entry)
-
-    const overview = createCourseOverview(entries, progresses)
-
-    expect(overview.items[1].status).toBe('unavailable')
-    expect(overview.items[2].status).toBe('not_started')
-  })
-
-  it('所有可用训练完成后进入章节完成状态', () => {
-    const progresses = progressMap()
-    trainingContent.sessions.forEach((session) => {
-      progresses[session.sessionId] = markCompleted(
-        progresses[session.sessionId],
-      )
+    trainingContent.sessions.slice(0, 3).forEach((session) => {
+      progresses[session.sessionId] = markCompleted(progresses[session.sessionId])
     })
 
-    const overview = createCourseOverview(trainingContent.entries, progresses)
+    const overview = createCourseOverview(trainingContent.chapters, progresses)
+
+    expect(overview.chapters[0].status).toBe('completed')
+    expect(overview.chapters[1].status).toBe('not_started')
+    expect(overview.activeItem?.sessionId).toBe('report-conclusion-004')
+  })
+
+  it('不可用训练和章节不会阻塞后续有效内容', () => {
+    const progresses = progressMap()
+    const chapters = trainingContent.chapters.map((chapter, chapterIndex) => {
+      if (chapterIndex === 0) {
+        return {
+          ...chapter,
+          entries: chapter.entries.map((entry) => ({
+            ...entry,
+            session: null,
+            error: '内容损坏',
+          })),
+        }
+      }
+      return chapterIndex === 1
+        ? { ...chapter, catalog: null, entries: [], sessions: [], error: '章节损坏' }
+        : chapter
+    })
+
+    const overview = createCourseOverview(chapters, progresses)
+
+    expect(overview.chapters[0].status).toBe('unavailable')
+    expect(overview.chapters[1].status).toBe('unavailable')
+    expect(overview.activeItem?.sessionId).toBe('disagree-goal-007')
+  })
+
+  it('十组全部完成后进入课程完成状态', () => {
+    const progresses = progressMap()
+    trainingContent.sessions.forEach((session) => {
+      progresses[session.sessionId] = markCompleted(progresses[session.sessionId])
+    })
+
+    const overview = createCourseOverview(trainingContent.chapters, progresses)
 
     expect(overview.allCompleted).toBe(true)
     expect(overview.activeItem).toBeNull()
-    expect(overview.completedCount).toBe(3)
+    expect(overview.completedCount).toBe(10)
+    expect(overview.chapters.every((chapter) => chapter.status === 'completed')).toBe(true)
   })
 })

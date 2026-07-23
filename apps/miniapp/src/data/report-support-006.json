@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "report-support-006",
+  "contentVersion": 1,
+  "title": "提出明确资源请求",
+  "objective": "遇到协作阻塞时，说明目标和缺口，并提出具体、可回应的资源请求",
+  "skill": "clear-reporting",
+  "difficulty": "L2",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "清晰汇报 · 资源请求",
+      "title": "跨团队权限一直没有开通",
+      "context": "你需要查看一份数据才能完成本周分析，但权限申请已经等待两天。负责人知道分析任务，却不了解当前具体阻塞。",
+      "question": "你会怎样请求支持？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "general-help",
+          "text": "这个事情卡住了，能不能帮忙推动一下？",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方知道你需要帮助，但还要追问具体卡点和期望动作。",
+            "strength": "主动暴露了阻塞并寻求支持。",
+            "risk": "请求对象、动作和时间不明确，难以立即执行。",
+            "condition": "适合对方完整了解上下文，且双方可以马上口头沟通时。"
+          }
+        },
+        {
+          "id": "silent-wait",
+          "text": "我再等等，权限开通后再继续做。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "负责人可能仍以为任务在正常推进。",
+            "strength": "没有把未经确认的责任推给他人。",
+            "risk": "阻塞持续消耗时间，也没有给团队调整资源和计划的机会。",
+            "condition": "只适合等待时间明确、不会影响交付且无需额外协调的情况。"
+          }
+        },
+        {
+          "id": "specific-support",
+          "text": "本周分析需要数据权限，目前已等待两天，继续延迟会影响周五交付。能否请你今天帮我确认审批人？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能理解目标、阻塞影响，并知道需要采取的具体动作。",
+            "strength": "把资源缺口转化成了明确、可回应的请求。",
+            "risk": "如果审批流程已有负责人，应先确认是否需要越级推动。",
+            "condition": "适合常规跨团队依赖和明确资源缺口的场景。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "把求助变成可执行请求",
+      "comparisonLabel": "比较另外两种请求"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "请求越具体，越容易获得回应",
+      "summary": "先说明要完成的目标，再讲清当前缺口和影响，最后提出对方能够执行或确认的具体动作。",
+      "formula": "当前目标 + 缺口影响 + 具体请求",
+      "counterexample": "这件事卡住了，麻烦帮我看看。",
+      "example": "分析需要数据权限，延迟会影响周五交付。能否今天帮我确认审批人？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "提出一个具体请求",
+      "prompt": "你需要设计同事今天确认页面方案，否则开发明天无法开始。请写一句资源请求。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "current-goal",
+          "title": "说明当前目标",
+          "description": "让对方理解请求服务于什么交付。",
+          "keywords": ["页面", "方案", "开发", "开始"]
+        },
+        {
+          "id": "gap-impact",
+          "title": "说明缺口影响",
+          "description": "说清当前缺少什么以及继续等待的影响。",
+          "keywords": ["确认", "否则", "影响", "无法"]
+        },
+        {
+          "id": "specific-request",
+          "title": "提出具体请求",
+          "description": "明确需要谁在什么时间完成什么动作。",
+          "keywords": ["今天", "能否", "请", "回复", "确认"]
+        }
+      ],
+      "referenceAnswer": "为了让开发明天开始，需要今天确认页面方案。能否请你下午四点前回复最终选择，如有分歧我们可以先对齐核心页面？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "资源请求训练完成",
+      "summary": "你练习了如何让支持请求具备明确目标、影响和动作。",
+      "takeaway": "不要只说需要帮助，要说明具体需要对方做什么。"
+    }
+  ]
+}

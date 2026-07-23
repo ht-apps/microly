@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "action-followup-009",
+  "contentVersion": 1,
+  "title": "友好催办关键输入",
+  "objective": "催办协作事项时，说明当前进度和影响，并确认一个明确回复时间",
+  "skill": "action-alignment",
+  "difficulty": "L1",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "推动协作 · 友好催办",
+      "title": "需要的资料还没有收到",
+      "context": "同事原计划上午提供客户资料，你需要收到后才能完成下午的方案。现在已经中午，对方可能正在处理其他紧急工作。",
+      "question": "你会怎样催办？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "blame-delay",
+          "text": "资料怎么还没给？我这边都被你耽误了。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "对方能感受到紧迫，但可能先回应指责而不是处理资料。",
+            "strength": "明确表达了当前存在延迟。",
+            "risk": "把影响归因于个人，缺少对当前状态和交付时间的确认。",
+            "condition": "不建议用于常规协作；反复违约也应回到事实和正式协作机制。"
+          }
+        },
+        {
+          "id": "gentle-reminder",
+          "text": "提醒一下，客户资料方便的时候发我哦。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "语气友好，但对方可能不知道你何时真正需要资料。",
+            "strength": "没有制造不必要的对立。",
+            "risk": "缺少事项影响和明确时间，仍然难以安排优先级。",
+            "condition": "适合事项不紧急、没有后续依赖的轻量提醒。"
+          }
+        },
+        {
+          "id": "clear-followup",
+          "text": "客户资料目前还未收到，我下午需要据此完成方案。能否在一点前发我，若有困难请告诉我新的时间？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能理解资料的用途、时间要求，也可以反馈现实困难。",
+            "strength": "包含进度事实、影响和明确回复时间。",
+            "risk": "如果一点并非真实截止时间，应避免人为制造紧迫感。",
+            "condition": "适合有明确后续依赖的日常协作催办。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "催办是确认协作条件",
+      "comparisonLabel": "比较另外两种催办"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "说明影响，也给对方回应空间",
+      "summary": "描述事项当前状态和对后续工作的影响，提出真实的需要时间，同时允许对方说明困难或更新计划。",
+      "formula": "进度事实 + 影响 + 明确时间",
+      "counterexample": "怎么还没给，我一直在等你。",
+      "example": "资料尚未收到，我下午需要完成方案。能否一点前发我，有困难请同步新的时间？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "发出一条清晰催办",
+      "prompt": "评审意见原定今天上午回复，你需要下午修改并提交。请写一句催办消息。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "current-status",
+          "title": "说明当前进度",
+          "description": "客观说明约定事项目前的状态。",
+          "keywords": ["意见", "回复", "还未", "目前", "上午"]
+        },
+        {
+          "id": "downstream-impact",
+          "title": "说明后续影响",
+          "description": "让对方理解这项输入关联的后续动作。",
+          "keywords": ["下午", "修改", "提交", "需要", "影响"]
+        },
+        {
+          "id": "response-time",
+          "title": "确认明确时间",
+          "description": "提出真实时间并允许更新计划。",
+          "keywords": ["几点", "前", "能否", "时间", "同步"]
+        }
+      ],
+      "referenceAnswer": "评审意见目前还未收到，我需要下午完成修改并提交。能否一点前回复，如时间有变化请同步我新的安排？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "友好催办训练完成",
+      "summary": "你练习了如何在不指责对方的情况下，让协作时间变得明确。",
+      "takeaway": "催办说明事实、影响和时间，也允许对方更新计划。"
+    }
+  ]
+}

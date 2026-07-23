@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "disagree-alternative-008",
+  "contentVersion": 1,
+  "title": "提出异议与替代方案",
+  "objective": "发现方案风险时，用依据说明影响，并提出能够兼顾目标的替代方案",
+  "skill": "constructive-disagreement",
+  "difficulty": "L3",
+  "riskLevel": "medium",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "表达异议 · 风险与替代",
+      "title": "要不要跳过完整测试？",
+      "context": "为了按时发布常规功能，负责人建议跳过完整回归测试。你发现本次改动涉及公共组件，可能影响多个页面，但仍有缩小范围的空间。",
+      "question": "你会怎样提出异议？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "absolute-rejection",
+          "text": "绝对不能跳过测试，这样上线太不负责任了。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方能感受到风险严重性，但也可能觉得自己的判断被评价。",
+            "strength": "明确守住了质量风险。",
+            "risk": "使用了绝对和评价性语言，没有说明依据，也没有帮助解决时间目标。",
+            "condition": "只适合已经触及明确发布红线、且需要立即停止操作的情况。"
+          }
+        },
+        {
+          "id": "comply-with-concern",
+          "text": "我觉得有风险，不过既然时间紧，就先这样上线吧。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "团队可能把这句话当作你已经接受现有风险。",
+            "strength": "表达了对进度压力的理解。",
+            "risk": "风险没有被量化，也没有形成明确决定或留下可执行方案。",
+            "condition": "只适合风险已经由有权限的人充分评估并明确接受的情况。"
+          }
+        },
+        {
+          "id": "evidence-alternative",
+          "text": "这次改动涉及公共组件，跳过回归可能影响多个页面。建议保留核心页面测试，并把低优先级改动延后。",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能理解风险依据，也获得一个兼顾发布时间的替代方案。",
+            "strength": "包含风险事实、影响范围和可执行替代方案。",
+            "risk": "仍需由团队明确核心页面范围和最终风险接受人。",
+            "condition": "适合常规产品发布取舍，不用于安全、合规或重大事故决策。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "让异议帮助团队做取舍",
+      "comparisonLabel": "比较另外两种表达"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "异议要带依据和替代",
+      "summary": "用可观察事实说明风险与影响，避免评价个人判断，并给出一个仍然回应原目标的替代路径。",
+      "formula": "风险依据 + 影响 + 替代方案",
+      "counterexample": "这个决定太冒险了，我坚决不同意。",
+      "example": "改动涉及公共组件，跳过回归可能影响多个页面。建议保留核心测试并延后低优先级改动。"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "用替代方案表达异议",
+      "prompt": "团队想删除数据校验来节省开发时间，你担心错误数据进入报表。可以先简化非核心字段，请写一句回应。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "risk-evidence",
+          "title": "说明风险依据",
+          "description": "指出具体改动或事实，而不是评价决定。",
+          "keywords": ["校验", "数据", "字段", "删除"]
+        },
+        {
+          "id": "risk-impact",
+          "title": "说明可能影响",
+          "description": "讲清风险可能影响的结果或范围。",
+          "keywords": ["影响", "错误", "报表", "进入"]
+        },
+        {
+          "id": "alternative-plan",
+          "title": "提供替代方案",
+          "description": "提出仍然回应时间目标的可行路径。",
+          "keywords": ["建议", "可以", "先", "保留", "简化"]
+        }
+      ],
+      "referenceAnswer": "删除数据校验可能让错误数据进入报表。建议保留核心字段校验，先简化非核心字段，这样可以控制开发时间。",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "替代方案训练完成",
+      "summary": "你练习了如何让不同意见同时包含依据、影响和可行路径。",
+      "takeaway": "有依据的异议，加上替代方案，才更容易推动决定。"
+    }
+  ]
+}

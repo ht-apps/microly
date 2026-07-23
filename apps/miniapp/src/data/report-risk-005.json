@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "report-risk-005",
+  "contentVersion": 1,
+  "title": "提前暴露项目风险",
+  "objective": "发现依赖可能延期时，说明风险事实、影响范围并提出需要的应对决定",
+  "skill": "clear-reporting",
+  "difficulty": "L2",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "清晰汇报 · 风险沟通",
+      "title": "依赖可能赶不上原计划",
+      "context": "你的任务依赖另一团队今天提供数据，但对方刚表示可能明天下午才能交付。如果不调整，原定周三的联调会受到影响。",
+      "question": "你会怎样向负责人汇报？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "wait-and-see",
+          "text": "先等等看吧，也许他们今天还是能给。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "对方可能以为当前没有需要处理的风险。",
+            "strength": "避免了过早下结论。",
+            "risk": "没有暴露已经出现的不确定性，会压缩负责人调整计划的时间。",
+            "condition": "只适合影响极小且有明确备用方案的短暂波动。"
+          }
+        },
+        {
+          "id": "alarm-only",
+          "text": "数据团队延期了，周三联调肯定要受影响。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方能注意到风险，但可能不知道影响多大、需要做什么。",
+            "strength": "及时指出了依赖变化。",
+            "risk": "结论过于绝对，也没有提供应对选项或需要确认的决定。",
+            "condition": "适合先发出快速预警，随后马上补充影响评估和方案。"
+          }
+        },
+        {
+          "id": "risk-with-response",
+          "text": "数据预计明天下午提供，周三联调可能顺延半天。我可以先完成模拟数据验证，想确认是否按这个方案调整。",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能判断风险来源、影响程度，并决定是否采用应对方案。",
+            "strength": "包含风险事实、影响范围和可执行请求。",
+            "risk": "模拟数据与真实数据差异较大时，需要同时说明方案局限。",
+            "condition": "适合依赖变化已经发生、但影响仍可控制的项目场景。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "让风险可以被及时处理",
+      "comparisonLabel": "比较另外两种预警"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "风险不是坏消息清单",
+      "summary": "说明已经确认的变化、可能影响的范围，再提出当前能够执行的应对方案或需要确认的决定。",
+      "formula": "风险事实 + 影响范围 + 应对请求",
+      "counterexample": "可能要延期，后面再看看。",
+      "example": "数据明天下午提供，联调可能顺延半天。我先完成模拟验证，请确认是否按此调整。"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "提前说清风险",
+      "prompt": "测试环境今天不稳定，可能影响明天的验收。你已经准备了本地验证方案，请写一句汇报。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "risk-fact",
+          "title": "说明风险事实",
+          "description": "区分已经确认的情况和仍然存在的不确定性。",
+          "keywords": ["不稳定", "目前", "可能", "环境"]
+        },
+        {
+          "id": "impact-scope",
+          "title": "说明影响范围",
+          "description": "让对方知道风险可能影响什么。",
+          "keywords": ["影响", "验收", "明天", "进度"]
+        },
+        {
+          "id": "response-request",
+          "title": "提出应对请求",
+          "description": "给出方案并明确需要对方确认的事项。",
+          "keywords": ["先", "本地", "方案", "确认", "可以"]
+        }
+      ],
+      "referenceAnswer": "测试环境目前不稳定，可能影响明天验收。我会先用本地环境完成核心验证，想确认是否保留明天下午作为备用验收时间。",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "风险汇报训练完成",
+      "summary": "你练习了如何把风险变成可以评估和处理的信息。",
+      "takeaway": "暴露事实和影响，也带上可执行的应对请求。"
+    }
+  ]
+}

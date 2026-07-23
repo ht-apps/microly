@@ -30,6 +30,7 @@ export type TrainingAction =
   | { type: 'SELECT_OPTION'; optionId: string }
   | { type: 'CONFIRM_CHOICE' }
   | { type: 'NEXT' }
+  | { type: 'PREVIOUS' }
   | { type: 'TOGGLE_OTHER_FEEDBACK' }
   | { type: 'UPDATE_PRACTICE'; text: string }
   | { type: 'SUBMIT_PRACTICE' }
@@ -101,6 +102,16 @@ export function transitionTraining(
   }
 
   switch (action.type) {
+    case 'PREVIOUS': {
+      if (progress.currentCardIndex <= 0 || card.type === 'completion') {
+        return progress
+      }
+
+      return withUpdatedAt({
+        ...progress,
+        currentCardIndex: progress.currentCardIndex - 1,
+      }, now)
+    }
     case 'SELECT_OPTION': {
       if (card.type !== 'choice' || progress.choiceConfirmed) {
         return progress

@@ -89,6 +89,48 @@ describe('training state', () => {
     expect(collapsed.otherFeedbackExpanded).toBe(false)
   })
 
+  it('第 2 至 5 步可以返回且保留已确认选择和主动表达', () => {
+    let choice = reachChoice()
+    const scenario = transitionTraining(choice, session, { type: 'PREVIOUS' }, timestamp)
+    expect(scenario.currentCardIndex).toBe(0)
+
+    choice = transitionTraining(choice, session, {
+      type: 'SELECT_OPTION',
+      optionId: 'constructive-boundary',
+    }, timestamp)
+    const feedback = transitionTraining(choice, session, { type: 'CONFIRM_CHOICE' }, timestamp)
+    const lockedChoice = transitionTraining(feedback, session, { type: 'PREVIOUS' }, timestamp)
+    expect(lockedChoice.currentCardIndex).toBe(1)
+    expect(lockedChoice.choiceConfirmed).toBe(true)
+    expect(lockedChoice.selectedOptionId).toBe('constructive-boundary')
+
+    let practice = reachPractice()
+    practice = transitionTraining(practice, session, {
+      type: 'UPDATE_PRACTICE',
+      text: '我今天无法全部完成，可以先做关键部分，其余明早补齐。',
+    }, timestamp)
+    practice = transitionTraining(practice, session, { type: 'SUBMIT_PRACTICE' }, timestamp)
+    const principle = transitionTraining(practice, session, { type: 'PREVIOUS' }, timestamp)
+    expect(principle.currentCardIndex).toBe(3)
+    expect(principle.practiceText).toBe(practice.practiceText)
+    expect(principle.practiceEvaluation).toEqual(practice.practiceEvaluation)
+  })
+
+  it('第一步和完成状态不能通过上一步修改流程', () => {
+    const initial = createInitialProgress(session, timestamp)
+    const started = transitionTraining(initial, session, { type: 'START' }, timestamp)
+    expect(transitionTraining(started, session, { type: 'PREVIOUS' }, timestamp)).toBe(started)
+
+    let completed = reachPractice()
+    completed = transitionTraining(completed, session, {
+      type: 'UPDATE_PRACTICE',
+      text: '我今天无法全部完成，可以先做关键部分，其余明早补齐。',
+    }, timestamp)
+    completed = transitionTraining(completed, session, { type: 'SUBMIT_PRACTICE' }, timestamp)
+    completed = transitionTraining(completed, session, { type: 'COMPLETE' }, timestamp)
+    expect(transitionTraining(completed, session, { type: 'PREVIOUS' }, timestamp)).toBe(completed)
+  })
+
   it('不足最小字数时不能提交，完成检查后可以完成训练', () => {
     let progress = reachPractice()
     progress = transitionTraining(progress, session, {

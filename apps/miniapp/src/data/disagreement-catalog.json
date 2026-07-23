@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "catalogId": "constructive-disagreement",
+  "contentVersion": 1,
+  "title": "表达异议",
+  "skill": "constructive-disagreement",
+  "description": "在保持共同目标的前提下，用事实说明分歧并提供可讨论的替代方案。",
+  "sessionIds": [
+    "disagree-goal-007",
+    "disagree-alternative-008"
+  ]
+}

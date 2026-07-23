@@ -126,6 +126,14 @@
   margin-top: 12px;
 }
 
+.review-early-note {
+  display: block;
+  margin-top: 12px;
+  color: #8a8e9c;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
 .review-upcoming-item {
   display: flex;
   align-items: center;
@@ -340,6 +348,32 @@
   border-radius: 18px;
   font-size: 23px;
   font-weight: 700;
+}
+
+.review-activity-note {
+  margin-top: 24px;
+  padding: 20px;
+  color: #4f4ba8;
+  background: #f1f0ff;
+  border-radius: 18px;
+  text-align: left;
+}
+
+.review-activity-note__title,
+.review-activity-note__body {
+  display: block;
+}
+
+.review-activity-note__title {
+  font-size: 23px;
+  font-weight: 700;
+}
+
+.review-activity-note__body {
+  margin-top: 7px;
+  color: #6f70a6;
+  font-size: 21px;
+  line-height: 1.5;
 }
 
 .review-text-button {

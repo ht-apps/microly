@@ -17,6 +17,9 @@ interface TrainingCardRendererProps {
   progress: TrainingProgress
   onAction: (action: TrainingAction) => void
   onBackHome: () => void
+  onStartReview: () => void
+  isPrincipleFavorite: boolean
+  onToggleFavorite: () => void
   reviewDueAt?: string | null
 }
 
@@ -119,11 +122,144 @@ function PracticeEvaluation({
   )
 }
 
+function PreviousButton({ onAction }: { onAction: (action: TrainingAction) => void }) {
+  return (
+    <Button
+      className='microly-button training-previous-button'
+      onClick={() => onAction({ type: 'PREVIOUS' })}
+    >
+      ‹ 上一步
+    </Button>
+  )
+}
+
+interface CompletedTrainingReviewProps {
+  session: TrainingSession
+  progress: TrainingProgress
+  cardIndex: number
+  onPrevious: () => void
+  onNext: () => void
+}
+
+export function CompletedTrainingReview({
+  session,
+  progress,
+  cardIndex,
+  onPrevious,
+  onNext,
+}: CompletedTrainingReviewProps) {
+  const card = session.cards[cardIndex]
+  const choiceCard = findChoiceCard(session)
+  const selectedOption = choiceCard?.options.find(
+    (option) => option.id === progress.selectedOptionId,
+  )
+
+  if (!card || card.type === 'completion') return null
+
+  let content
+  switch (card.type) {
+    case 'scenario':
+      content = (
+        <>
+          <Text className='card-title'>{card.title}</Text>
+          <Text className='scenario-context'>{card.context}</Text>
+          <View className='scenario-question'><Text>{card.question}</Text></View>
+        </>
+      )
+      break
+    case 'choice':
+      content = (
+        <>
+          <Text className='card-title'>{card.prompt}</Text>
+          <View className='training-locked-notice'>选择已经确认，回看时不能修改。</View>
+          <View className='option-list'>
+            {card.options.map((option, index) => {
+              const isSelected = option.id === progress.selectedOptionId
+              return (
+                <View
+                  key={option.id}
+                  className={`choice-option choice-option--locked ${isSelected ? 'choice-option--selected' : ''}`}
+                >
+                  <Text className='choice-option__index'>{String.fromCharCode(65 + index)}</Text>
+                  <Text className='choice-option__text'>{option.text}</Text>
+                </View>
+              )
+            })}
+          </View>
+        </>
+      )
+      break
+    case 'feedback':
+      content = (
+        <>
+          <Text className='card-title'>{card.title}</Text>
+          {selectedOption && <FeedbackDetail option={selectedOption} />}
+        </>
+      )
+      break
+    case 'principle':
+      content = (
+        <>
+          <Text className='card-title'>{card.title}</Text>
+          <Text className='principle-summary'>{card.summary}</Text>
+          <View className='formula-card'>
+            <Text className='formula-card__label'>记住这个结构</Text>
+            <Text className='formula-card__value'>{card.formula}</Text>
+          </View>
+          <View className='example-card example-card--negative'>
+            <Text className='example-card__label'>容易造成误解</Text>
+            <Text className='example-card__text'>{card.counterexample}</Text>
+          </View>
+          <View className='example-card example-card--positive'>
+            <Text className='example-card__label'>更清晰的表达</Text>
+            <Text className='example-card__text'>{card.example}</Text>
+          </View>
+        </>
+      )
+      break
+    case 'practice':
+      content = (
+        <>
+          <Text className='card-title'>{card.title}</Text>
+          <Text className='practice-prompt'>{card.prompt}</Text>
+          <View className='selected-summary'>
+            <Text className='selected-summary__label'>你的表达</Text>
+            <Text className='selected-summary__text'>{progress.practiceText}</Text>
+          </View>
+          <PracticeEvaluation card={card} progress={progress} />
+        </>
+      )
+      break
+    default:
+      content = null
+  }
+
+  return (
+    <View className='training-card training-review-card'>
+      <Text className='card-eyebrow'>只读回看 · {cardIndex + 1}/5</Text>
+      {content}
+      <View className='training-review-actions'>
+        {cardIndex > 0 && (
+          <Button className='microly-button training-review-secondary' onClick={onPrevious}>
+            ‹ 上一步
+          </Button>
+        )}
+        <Button className='microly-button training-review-primary' onClick={onNext}>
+          {cardIndex < 4 ? '下一步 ›' : '返回完成总结'}
+        </Button>
+      </View>
+    </View>
+  )
+}
+
 export default function TrainingCardRenderer({
   session,
   progress,
   onAction,
   onBackHome,
+  onStartReview,
+  isPrincipleFavorite,
+  onToggleFavorite,
   reviewDueAt,
 }: TrainingCardRendererProps) {
   const card = session.cards[progress.currentCardIndex]
@@ -156,6 +292,9 @@ export default function TrainingCardRenderer({
         <View className='training-card'>
           <Text className='card-eyebrow'>做出选择</Text>
           <Text className='card-title'>{card.prompt}</Text>
+          {progress.choiceConfirmed && (
+            <View className='training-locked-notice'>选择已经确认，返回仅用于回看。</View>
+          )}
           <View className='option-list'>
             {card.options.map((option, index) => {
               const isSelected = progress.selectedOptionId === option.id
@@ -198,6 +337,7 @@ export default function TrainingCardRenderer({
               查看反馈
             </Button>
           )}
+          <PreviousButton onAction={onAction} />
         </View>
       )
 
@@ -234,6 +374,7 @@ export default function TrainingCardRenderer({
           >
             提炼表达原则
           </Button>
+          <PreviousButton onAction={onAction} />
         </View>
       )
     }
@@ -257,11 +398,18 @@ export default function TrainingCardRenderer({
             <Text className='example-card__text'>{card.example}</Text>
           </View>
           <Button
+            className={`microly-button favorite-button ${isPrincipleFavorite ? 'favorite-button--active' : ''}`}
+            onClick={onToggleFavorite}
+          >
+            {isPrincipleFavorite ? '★ 已收藏原则' : '☆ 收藏这条原则'}
+          </Button>
+          <Button
             className='microly-button training-primary-button'
             onClick={() => onAction({ type: 'NEXT' })}
           >
             换你来回答
           </Button>
+          <PreviousButton onAction={onAction} />
         </View>
       )
 
@@ -311,6 +459,7 @@ export default function TrainingCardRenderer({
               </Button>
             </>
           )}
+          <PreviousButton onAction={onAction} />
         </View>
       )
     }
@@ -360,6 +509,18 @@ export default function TrainingCardRenderer({
               </View>
             </View>
           )}
+          <Button
+            className={`microly-button favorite-button ${isPrincipleFavorite ? 'favorite-button--active' : ''}`}
+            onClick={onToggleFavorite}
+          >
+            {isPrincipleFavorite ? '★ 已收藏原则' : '☆ 收藏本次原则'}
+          </Button>
+          <Button
+            className='microly-button completion-review-button'
+            onClick={onStartReview}
+          >
+            回看本次训练
+          </Button>
           <Button className='microly-button training-primary-button' onClick={onBackHome}>
             回到今日
           </Button>

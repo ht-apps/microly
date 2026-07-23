@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "action-owner-010",
+  "contentVersion": 1,
+  "title": "明确责任人与截止时间",
+  "objective": "会议形成方向后，把事项、责任人和截止时间转化为可确认的行动安排",
+  "skill": "action-alignment",
+  "difficulty": "L2",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "推动协作 · 行动确认",
+      "title": "会议结束了，但谁来做？",
+      "context": "项目会议确定要补充一份用户数据分析，但讨论即将结束，谁负责整理、何时提供都还没有明确，参会者来自三个团队。",
+      "question": "你会怎样推动确认？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "assume-ownership",
+          "text": "那这个分析后面尽快补一下吧。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "大家知道有后续事项，但可能认为其他人会负责。",
+            "strength": "提醒了团队不要遗漏分析任务。",
+            "risk": "没有责任人、交付物和截止时间，事项很容易在会后失去跟进。",
+            "condition": "只适合责任分工和时间已经在其他地方明确记录的情况。"
+          }
+        },
+        {
+          "id": "assign-directly",
+          "text": "这个就让数据同事周三前做完吧。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "行动方向明确，但被指定的人可能尚未确认范围和时间。",
+            "strength": "提出了责任方和截止时间。",
+            "risk": "单方面分配可能忽略对方资源，也没有确认具体交付内容。",
+            "condition": "适合你拥有明确分配权限，且任务范围已充分确认的场景。"
+          }
+        },
+        {
+          "id": "confirm-action",
+          "text": "确认一下：数据团队周三前整理核心指标，我负责补充分析说明，周四上午一起评审，这样安排可以吗？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "各方能核对自己的事项、时间和协作节点，并当场提出调整。",
+            "strength": "包含事项、责任人、截止时间和明确确认。",
+            "risk": "如果数据团队没有代表参会，需要会后向实际负责人再次确认。",
+            "condition": "适合会议结尾整理多方行动项的常规协作场景。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "把讨论转化为行动安排",
+      "comparisonLabel": "比较另外两种收尾"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "行动项必须能够被确认",
+      "summary": "会议结束前复述具体事项、责任人和截止时间，再邀请相关人确认，避免用“尽快”和“后面”代替安排。",
+      "formula": "事项 + 责任人 + 截止时间 + 确认",
+      "counterexample": "这个后面大家尽快推进一下。",
+      "example": "数据团队周三整理指标，我补充说明，周四上午一起评审，这样安排可以吗？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "确认一组行动项",
+      "prompt": "会议决定更新帮助文档。运营负责初稿，你负责审核，希望本周五发布。请写一句会议收尾。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "action-item",
+          "title": "说明具体事项",
+          "description": "明确需要产出的内容和关键动作。",
+          "keywords": ["文档", "初稿", "审核", "发布"]
+        },
+        {
+          "id": "owner-deadline",
+          "title": "明确人与时间",
+          "description": "说明谁负责以及截止节点。",
+          "keywords": ["运营", "我", "周", "前", "周五"]
+        },
+        {
+          "id": "explicit-confirmation",
+          "title": "邀请明确确认",
+          "description": "让相关人可以当场确认或调整安排。",
+          "keywords": ["确认", "可以吗", "这样", "是否", "安排"]
+        }
+      ],
+      "referenceAnswer": "确认一下：运营周三前完成帮助文档初稿，我周四完成审核，周五发布，这样的安排可以吗？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "行动确认训练完成",
+      "summary": "你练习了如何让会议决定具备责任人、时间和确认闭环。",
+      "takeaway": "明确谁在什么时候交付什么，并让对方确认。"
+    }
+  ]
+}

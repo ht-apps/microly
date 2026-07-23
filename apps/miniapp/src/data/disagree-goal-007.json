@@ -1,0 +1,113 @@
+{
+  "schemaVersion": "1.0",
+  "sessionId": "disagree-goal-007",
+  "contentVersion": 1,
+  "title": "先确认共同目标",
+  "objective": "面对不同方案时，先对齐共同目标，再说明事实分歧并提出确认问题",
+  "skill": "constructive-disagreement",
+  "difficulty": "L2",
+  "riskLevel": "low",
+  "estimatedMinutes": 3,
+  "cards": [
+    {
+      "id": "scenario",
+      "type": "scenario",
+      "eyebrow": "表达异议 · 方案讨论",
+      "title": "真的要把时间再提前吗？",
+      "context": "会议中，有人建议把发布时间提前三天，以便赶上宣传节点。你担心压缩验证时间，但大家都希望活动能够按时产生效果。",
+      "question": "你会怎样表达不同意见？"
+    },
+    {
+      "id": "choice",
+      "type": "choice",
+      "prompt": "选择你更可能说的一句话",
+      "options": [
+        {
+          "id": "direct-opposition",
+          "text": "我不同意，提前三天肯定不现实。",
+          "rating": "risky",
+          "feedback": {
+            "interpretation": "对方能迅速听到你的立场，但可能把讨论理解为立场对抗。",
+            "strength": "明确表达了不同判断。",
+            "risk": "没有回应共同目标，也没有说明判断依据和可讨论的问题。",
+            "condition": "适合已经充分讨论依据、现在只需明确表态的决策时刻。"
+          }
+        },
+        {
+          "id": "silent-agreement",
+          "text": "大家都觉得可以，那就按提前三天做吧。",
+          "rating": "not_recommended",
+          "feedback": {
+            "interpretation": "团队可能认为你认可当前方案和相应风险。",
+            "strength": "避免了会议中的直接冲突。",
+            "risk": "没有暴露验证时间不足的关键信息，后续问题更难提前处理。",
+            "condition": "只适合你确实认可方案，且没有新的重要事实需要补充时。"
+          }
+        },
+        {
+          "id": "goal-first-question",
+          "text": "我也希望赶上宣传节点。按现有范围提前三天会少一轮验证，我们是否先确认哪些功能必须这次上线？",
+          "rating": "recommended",
+          "feedback": {
+            "interpretation": "对方能看到你在维护共同目标，并愿意讨论具体取舍。",
+            "strength": "包含共同目标、事实分歧和推动决策的问题。",
+            "risk": "如果时间已经不可调整，还需要进一步提出明确的范围建议。",
+            "condition": "适合目标一致但对实现路径存在分歧的常规方案讨论。"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "feedback",
+      "title": "先把分歧放回共同目标",
+      "comparisonLabel": "比较另外两种表达"
+    },
+    {
+      "id": "principle",
+      "type": "principle",
+      "title": "异议不是反对共同目标",
+      "summary": "先确认双方希望实现的结果，再说明影响判断的事实差异，最后提出一个能够推动取舍的问题。",
+      "formula": "共同目标 + 事实分歧 + 确认问题",
+      "counterexample": "这个方案不行，我不同意。",
+      "example": "我也希望赶上节点。提前三天会少一轮验证，我们先确认本次必须上线的范围吗？"
+    },
+    {
+      "id": "practice",
+      "type": "practice",
+      "title": "从共同目标开始",
+      "prompt": "同事希望一次加入全部需求，你担心本周无法稳定交付。大家的共同目标是尽快验证核心价值。请写一句回应。",
+      "minLength": 10,
+      "maxLength": 200,
+      "dimensions": [
+        {
+          "id": "shared-goal",
+          "title": "确认共同目标",
+          "description": "先说明双方希望达成的共同结果。",
+          "keywords": ["同意", "希望", "目标", "验证", "核心"]
+        },
+        {
+          "id": "factual-difference",
+          "title": "说明事实分歧",
+          "description": "讲清影响判断的范围、时间或资源事实。",
+          "keywords": ["全部", "本周", "范围", "稳定", "时间"]
+        },
+        {
+          "id": "confirmation-question",
+          "title": "提出确认问题",
+          "description": "用问题推动团队明确取舍。",
+          "keywords": ["是否", "能否", "先", "确认", "可以吗"]
+        }
+      ],
+      "referenceAnswer": "我也希望尽快验证核心价值。全部需求本周加入会压缩稳定性验证，我们是否先上线核心流程，其他需求放到下一轮？",
+      "disclaimer": "这是基于表达结构的本地提示，不是 AI 评价，也不代表唯一正确答案。"
+    },
+    {
+      "id": "completion",
+      "type": "completion",
+      "title": "共同目标训练完成",
+      "summary": "你练习了如何在提出异议前，先建立可以继续讨论的共同基础。",
+      "takeaway": "先对齐想实现什么，再讨论用什么方式实现。"
+    }
+  ]
+}

@@ -174,6 +174,24 @@ export const TrainingCatalogSchema = z.object({
   }
 })
 
+export const TrainingLibrarySchema = z.object({
+  schemaVersion: z.literal('1.0'),
+  libraryId: IdentifierSchema,
+  contentVersion: z.number().int().positive(),
+  title: z.string().min(1).max(50),
+  description: z.string().min(1).max(200),
+  catalogIds: z.array(IdentifierSchema).min(1),
+}).superRefine((library, context) => {
+  const catalogIds = new Set(library.catalogIds)
+  if (catalogIds.size !== library.catalogIds.length) {
+    context.addIssue({
+      code: 'custom',
+      message: '课程库中的 catalogId 不能重复',
+      path: ['catalogIds'],
+    })
+  }
+})
+
 export type TrainingOptionRating = z.infer<typeof TrainingOptionRatingSchema>
 export type TrainingOption = z.infer<typeof TrainingOptionSchema>
 export type ScenarioCard = z.infer<typeof ScenarioCardSchema>
@@ -186,3 +204,4 @@ export type CompletionCard = z.infer<typeof CompletionCardSchema>
 export type TrainingCard = z.infer<typeof TrainingCardSchema>
 export type TrainingSession = z.infer<typeof TrainingSessionSchema>
 export type TrainingCatalog = z.infer<typeof TrainingCatalogSchema>
+export type TrainingLibrary = z.infer<typeof TrainingLibrarySchema>

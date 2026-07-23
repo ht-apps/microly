@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "catalogId": "action-alignment",
+  "contentVersion": 1,
+  "title": "推动协作",
+  "skill": "action-alignment",
+  "description": "练习友好催办、明确责任和截止时间，让讨论更容易转化为行动。",
+  "sessionIds": [
+    "action-followup-009",
+    "action-owner-010"
+  ]
+}

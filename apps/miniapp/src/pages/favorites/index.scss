@@ -1,0 +1,196 @@
+.favorites-page {
+  min-height: 100vh;
+  padding: 44px 30px 70px;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(126, 107, 255, 0.14), transparent 28%),
+    #fffaf2;
+}
+
+.favorites-hero__eyebrow,
+.favorites-hero__title,
+.favorites-hero__body,
+.favorite-card__title,
+.favorite-card__summary,
+.favorite-formula__label,
+.favorite-formula__value,
+.favorite-example__label,
+.favorite-example__value,
+.favorites-empty__title,
+.favorites-empty__body {
+  display: block;
+}
+
+.favorites-hero__eyebrow {
+  color: #5b5bd6;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.favorites-hero__title {
+  margin-top: 16px;
+  color: #17213b;
+  font-size: 42px;
+  font-weight: 700;
+}
+
+.favorites-hero__body {
+  margin-top: 12px;
+  color: #747887;
+  font-size: 23px;
+  line-height: 1.55;
+}
+
+.favorites-notice {
+  margin-top: 24px;
+  padding: 18px 22px;
+  color: #75581c;
+  background: #fff0c7;
+  border-radius: 18px;
+  font-size: 22px;
+}
+
+.favorites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-top: 30px;
+}
+
+.favorite-card,
+.favorites-empty {
+  padding: 30px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(91, 91, 214, 0.1);
+  border-radius: 28px;
+  box-shadow: 0 18px 46px rgba(37, 34, 78, 0.08);
+}
+
+.favorite-card__topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.favorite-card__session {
+  color: #5b5bd6;
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.favorite-card__updated {
+  padding: 6px 12px;
+  color: #8a651c;
+  background: #fff0c7;
+  border-radius: 999px;
+  font-size: 18px;
+}
+
+.favorite-card__title {
+  margin-top: 18px;
+  color: #222b43;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.favorite-card__summary {
+  margin-top: 14px;
+  color: #666b7b;
+  font-size: 23px;
+  line-height: 1.65;
+}
+
+.favorite-formula,
+.favorite-example {
+  margin-top: 20px;
+  padding: 22px;
+  border-radius: 19px;
+}
+
+.favorite-formula {
+  color: #4541a4;
+  background: #f1f0ff;
+}
+
+.favorite-example {
+  color: #276b56;
+  background: #edf8f3;
+}
+
+.favorite-formula__label,
+.favorite-example__label {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.favorite-formula__value,
+.favorite-example__value {
+  margin-top: 8px;
+  font-size: 23px;
+  line-height: 1.6;
+}
+
+.favorite-card__actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.favorite-card__primary,
+.favorite-card__secondary,
+.favorites-primary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 76px;
+  border-radius: 20px;
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 76px;
+}
+
+.favorite-card__primary,
+.favorite-card__secondary {
+  flex: 1;
+  margin: 0;
+}
+
+.favorite-card__primary,
+.favorites-primary-button {
+  color: #fff;
+  background: linear-gradient(135deg, #6964e8, #5652c9);
+}
+
+.favorite-card__secondary {
+  color: #6f7485;
+  background: #f4f2ee;
+}
+
+.favorites-empty {
+  margin-top: 30px;
+  text-align: center;
+}
+
+.favorites-empty__icon {
+  color: #6964e8;
+  font-size: 64px;
+}
+
+.favorites-empty__title {
+  margin-top: 12px;
+  color: #252d44;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.favorites-empty__body {
+  margin-top: 12px;
+  color: #767a89;
+  font-size: 22px;
+  line-height: 1.6;
+}
+
+.favorites-primary-button {
+  margin-top: 26px;
+}

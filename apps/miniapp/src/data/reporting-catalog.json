@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "catalogId": "clear-reporting",
+  "contentVersion": 1,
+  "title": "清晰汇报",
+  "skill": "clear-reporting",
+  "description": "练习先说结论、及时暴露风险，并把资源请求说得具体可执行。",
+  "sessionIds": [
+    "report-conclusion-004",
+    "report-risk-005",
+    "report-support-006"
+  ]
+}
