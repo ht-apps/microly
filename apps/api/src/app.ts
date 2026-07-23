@@ -19,6 +19,7 @@ import { and, desc, eq, gt } from 'drizzle-orm'
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
 import { ZodError } from 'zod'
 
+import { registerAdminRoutes } from './admin.js'
 import { createDatabase, type DatabaseContext } from './db/client.js'
 import {
   accounts,
@@ -186,6 +187,7 @@ export interface CreateAppOptions {
   logger?: boolean
   wechat?: { appId: string; appSecret: string; identityHashSecret: string }
   exchangeWechatCode?: (code: string) => Promise<{ openid: string }>
+  admin?: { token: string; origins: string[] }
 }
 
 export function createApp(options: CreateAppOptions) {
@@ -203,6 +205,9 @@ export function createApp(options: CreateAppOptions) {
   app.addHook('onClose', async () => database.pool.end())
   app.setErrorHandler((cause, _request, reply) => {
     if (cause instanceof ZodError) return error(reply, 400, 'invalid_request', '请求内容不符合接口约定。')
+    if (typeof cause === 'object' && cause !== null && 'statusCode' in cause && cause.statusCode === 400) {
+      return error(reply, 400, 'invalid_request', '请求内容不符合接口约定。')
+    }
     app.log.error(cause)
     return error(reply, 500, 'internal_error', '服务暂时不可用。')
   })
@@ -397,6 +402,8 @@ export function createApp(options: CreateAppOptions) {
     }
     return reply.send({ data: { accepted } })
   })
+
+  registerAdminRoutes(app, database, options.admin)
 
   return app
 }

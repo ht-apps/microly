@@ -16,6 +16,7 @@ if (!databaseUrl.includes('microly_test')) {
 const database = createDatabase(databaseUrl)
 const app = createApp({
   databaseUrl,
+  admin: { token: 'admin-token-with-at-least-32-characters', origins: ['http://localhost:5173'] },
   wechat: { appId: 'wx-test', appSecret: 'test-secret', identityHashSecret: 'identity-secret-with-at-least-32-characters' },
   exchangeWechatCode: async (code) => ({ openid: code }),
 })
@@ -24,6 +25,7 @@ let issuedToken = ''
 
 beforeAll(async () => {
   await database.pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await migrateDatabase(database)
   await migrateDatabase(database)
   await seedContent(database)
   await app.ready()
@@ -42,6 +44,19 @@ afterAll(async () => {
 })
 
 describe('network MVP API', () => {
+  const adminAuthorization = 'Bearer admin-token-with-at-least-32-characters'
+
+  it('将空 JSON 请求体报告为安全的 400 错误', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/content/drafts/11111111-1111-4111-8111-111111111111/validate',
+      headers: { authorization: adminAuthorization, 'content-type': 'application/json' },
+      payload: '',
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toEqual({ error: { code: 'invalid_request', message: '请求内容不符合接口约定。' } })
+  })
+
   it('返回内容 ETag 并支持 304', async () => {
     const first = await app.inject({ method: 'GET', url: '/v1/content/current' })
     expect(first.statusCode).toBe(200)
@@ -124,6 +139,126 @@ describe('network MVP API', () => {
       createHash('sha256').update(issuedToken).digest('hex'),
     )
     expect(sessions.rows[0].token_hash).not.toBe(issuedToken)
+  })
+
+  it('保护管理接口并支持草稿、发布、回滚和下架', async () => {
+    const publicOnlyApp = createApp({ databaseUrl })
+    await publicOnlyApp.ready()
+    const unavailable = await publicOnlyApp.inject({ method: 'GET', url: '/v1/admin/session' })
+    const publicContent = await publicOnlyApp.inject({ method: 'GET', url: '/v1/content/current' })
+    expect(unavailable.statusCode).toBe(503)
+    expect(publicContent.statusCode).toBe(200)
+    await publicOnlyApp.close()
+
+    const denied = await app.inject({ method: 'GET', url: '/v1/admin/session', headers: { authorization: 'Bearer invalid' } })
+    expect(denied.statusCode).toBe(401)
+    const session = await app.inject({ method: 'GET', url: '/v1/admin/session', headers: { authorization: adminAuthorization } })
+    expect(session.statusCode).toBe(200)
+
+    const created = await app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: {} })
+    expect(created.statusCode).toBe(201)
+    const draft = created.json().data
+    draft.bundle.sessions['boundary-decline-001'].title = '说明边界并协商优先级'
+    const saved = await app.inject({
+      method: 'PUT', url: `/v1/admin/content/drafts/${draft.id}`, headers: { authorization: adminAuthorization },
+      payload: { revision: draft.revision, bundle: draft.bundle },
+    })
+    expect(saved.statusCode).toBe(200)
+    expect(saved.json().data.revision).toBe(2)
+    const stale = await app.inject({
+      method: 'PUT', url: `/v1/admin/content/drafts/${draft.id}`, headers: { authorization: adminAuthorization },
+      payload: { revision: 1, bundle: draft.bundle },
+    })
+    expect(stale.statusCode).toBe(409)
+    expect(stale.json().error.code).toBe('draft_conflict')
+    const validation = await app.inject({ method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/validate`, headers: { authorization: adminAuthorization } })
+    expect(validation.json().data.valid).toBe(true)
+    expect(validation.json().data.normalizedBundle.releaseVersion).toBe(2)
+    expect(validation.json().data.normalizedBundle.sessions['boundary-decline-001'].contentVersion).toBe(2)
+    const published = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/publish`, headers: { authorization: adminAuthorization },
+      payload: { revision: 2, reason: '验证内容发布闭环' },
+    })
+    expect(published.statusCode).toBe(201)
+    expect(published.json().data.releaseVersion).toBe(2)
+    const releases = await app.inject({ method: 'GET', url: '/v1/admin/content/releases', headers: { authorization: adminAuthorization } })
+    expect(releases.statusCode).toBe(200)
+    expect(releases.json().data.releases[0].sessionCount).toBe(10)
+
+    const rollback = await app.inject({ method: 'POST', url: '/v1/admin/content/releases/1/rollback-draft', headers: { authorization: adminAuthorization } })
+    expect(rollback.statusCode).toBe(201)
+    expect(rollback.json().data.baseReleaseVersion).toBe(1)
+    const withdrawn = await app.inject({
+      method: 'POST', url: '/v1/admin/content/current/sessions/boundary-priority-002/withdraw',
+      headers: { authorization: adminAuthorization }, payload: { confirmation: 'WITHDRAW', reason: '集成测试紧急下架' },
+    })
+    expect(withdrawn.statusCode).toBe(201)
+    expect(withdrawn.json().data.releaseVersion).toBe(3)
+    const current = await app.inject({ method: 'GET', url: '/v1/content/current' })
+    expect(current.json().data.bundle.sessions['boundary-priority-002']).toBeUndefined()
+    const historical = await database.pool.query(`SELECT count(*)::int count FROM content_releases
+      WHERE bundle->'sessions' ? 'boundary-priority-002'`)
+    expect(historical.rows[0].count).toBe(2)
+
+    const invalidDraft = await app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: {} })
+    const invalidSaved = await app.inject({
+      method: 'PUT', url: `/v1/admin/content/drafts/${invalidDraft.json().data.id}`,
+      headers: { authorization: adminAuthorization }, payload: { revision: 1, bundle: {} },
+    })
+    const invalidPublish = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${invalidDraft.json().data.id}/publish`,
+      headers: { authorization: adminAuthorization }, payload: { revision: invalidSaved.json().data.revision, reason: '验证非法草稿拦截' },
+    })
+    expect(invalidPublish.statusCode).toBe(422)
+    expect(invalidPublish.json().error.code).toBe('content_invalid')
+
+    const [draftA, draftB] = await Promise.all([
+      app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: {} }),
+      app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: {} }),
+    ])
+    const concurrent = await Promise.all([draftA, draftB].map((item, index) => app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${item.json().data.id}/publish`, headers: { authorization: adminAuthorization },
+      payload: { revision: 1, reason: `并发发布验证 ${index + 1}` },
+    })))
+    expect(concurrent.map((response) => response.statusCode)).toEqual([201, 201])
+    expect(concurrent.map((response) => response.json().data.releaseVersion).sort()).toEqual([4, 5])
+  })
+
+  it('处理反馈并返回聚合漏斗，不暴露账号标识', async () => {
+    const guest = await app.inject({ method: 'POST', url: '/v1/auth/guest', payload: { installationId: '55555555-5555-4555-8555-555555555555' } })
+    const userAuthorization = `Bearer ${guest.json().data.token}`
+    const submitted = await app.inject({
+      method: 'POST', url: '/v1/feedback', headers: { authorization: userAuthorization },
+      payload: { category: 'product_suggestion', detail: '希望后台能够更清楚地展示学习漏斗。' },
+    })
+    expect(submitted.statusCode).toBe(201)
+    const listed = await app.inject({ method: 'GET', url: '/v1/admin/feedback?status=new', headers: { authorization: adminAuthorization } })
+    expect(listed.json().data.items[0].detail).toContain('学习漏斗')
+    const updated = await app.inject({
+      method: 'PATCH', url: `/v1/admin/feedback/${submitted.json().data.feedbackId}`,
+      headers: { authorization: adminAuthorization }, payload: { status: 'resolved', internalNote: '已纳入本轮实现' },
+    })
+    expect(updated.statusCode, updated.body).toBe(200)
+    expect(updated.json().data.status).toBe('resolved')
+    expect(updated.json().data.resolvedAt).toBeTruthy()
+
+    const now = Date.now() - 30_000
+    const events = [
+      { eventId: '60000000-0000-4000-8000-000000000001', name: 'app_open', occurredAt: new Date(now).toISOString(), properties: { source: 'direct' } },
+      { eventId: '60000000-0000-4000-8000-000000000002', name: 'onboarding_view', occurredAt: new Date(now + 1_000).toISOString(), properties: { isFirstVisit: true } },
+      { eventId: '60000000-0000-4000-8000-000000000003', name: 'training_start', occurredAt: new Date(now + 2_000).toISOString(), properties: { sessionId: 'boundary-decline-001', contentVersion: 2, entry: 'onboarding' } },
+      { eventId: '60000000-0000-4000-8000-000000000004', name: 'option_select', occurredAt: new Date(now + 3_000).toISOString(), properties: { sessionId: 'boundary-decline-001', contentVersion: 2, optionId: 'constructive-boundary', displayPosition: 0, rating: 'recommended' } },
+      { eventId: '60000000-0000-4000-8000-000000000005', name: 'training_complete', occurredAt: new Date(now + 4_000).toISOString(), properties: { sessionId: 'boundary-decline-001', contentVersion: 2, durationMs: 2_000, practiceUsed: false } },
+      { eventId: '60000000-0000-4000-8000-000000000006', name: 'wechat_login_success', occurredAt: new Date(now + 5_000).toISOString(), properties: { merged: false } },
+    ]
+    const accepted = await app.inject({ method: 'POST', url: '/v1/events/batch', headers: { authorization: userAuthorization }, payload: { events } })
+    expect(accepted.json().data.accepted).toBe(6)
+    const metrics = await app.inject({ method: 'GET', url: '/v1/admin/metrics?window=7d', headers: { authorization: adminAuthorization } })
+    expect(metrics.statusCode).toBe(200)
+    const funnelCounts = metrics.json().data.funnel.map((stage: { accounts: number }) => stage.accounts)
+    expect(funnelCounts[0]).toBeGreaterThanOrEqual(1)
+    expect(funnelCounts.slice(1)).toEqual([1, 1, 1, 1, 1])
+    expect(JSON.stringify(metrics.json())).not.toContain(guest.json().data.accountId)
   })
 
   it('幂等合并安全学习状态', async () => {

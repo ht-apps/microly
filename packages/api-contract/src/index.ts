@@ -244,6 +244,89 @@ export const FeedbackResponseSchema = z.object({
   data: z.object({ feedbackId: z.uuid(), status: z.literal('new') }),
 })
 
+export const AdminFeedbackStatusSchema = z.enum(['new', 'in_progress', 'resolved', 'dismissed'])
+export const AdminDraftStatusSchema = z.enum(['draft', 'published', 'abandoned'])
+
+export const AdminDraftCreateRequestSchema = z.object({
+  baseReleaseVersion: ContentVersionSchema.optional(),
+}).strict()
+
+export const AdminDraftUpdateRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  bundle: z.unknown(),
+}).strict()
+
+export const AdminPublishRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  reason: z.string().trim().min(3).max(300),
+}).strict()
+
+export const AdminWithdrawRequestSchema = z.object({
+  confirmation: z.literal('WITHDRAW'),
+  reason: z.string().trim().min(3).max(300),
+}).strict()
+
+export const AdminFeedbackUpdateRequestSchema = z.object({
+  status: AdminFeedbackStatusSchema,
+  internalNote: z.string().trim().max(500).nullable().optional(),
+}).strict()
+
+export const AdminValidationIssueSchema = z.object({
+  path: z.string(),
+  message: z.string(),
+  severity: z.enum(['error', 'warning']),
+})
+
+export const AdminContentReleaseSchema = z.object({
+  releaseVersion: ContentVersionSchema,
+  checksum: z.string().regex(/^[a-f0-9]{64}$/),
+  createdFromVersion: ContentVersionSchema.nullable(),
+  releaseReason: z.string().nullable(),
+  publishedAt: IsoTimeSchema,
+  sessionCount: z.number().int().nonnegative(),
+})
+
+export const AdminContentDraftSchema = z.object({
+  id: z.uuid(),
+  baseReleaseVersion: ContentVersionSchema.nullable(),
+  bundle: z.unknown(),
+  status: AdminDraftStatusSchema,
+  revision: z.number().int().positive(),
+  publishedReleaseVersion: ContentVersionSchema.nullable(),
+  createdAt: IsoTimeSchema,
+  updatedAt: IsoTimeSchema,
+})
+
+export const AdminFeedbackSchema = z.object({
+  id: z.uuid(),
+  category: z.enum(['content_error', 'product_suggestion', 'inappropriate_content']),
+  detail: z.string(),
+  sessionId: SessionIdSchema.nullable(),
+  contentVersion: ContentVersionSchema.nullable(),
+  status: AdminFeedbackStatusSchema,
+  internalNote: z.string().nullable(),
+  createdAt: IsoTimeSchema,
+  updatedAt: IsoTimeSchema,
+  resolvedAt: IsoTimeSchema.nullable(),
+})
+
+export const AdminFunnelStageSchema = z.object({
+  name: z.enum(['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success']),
+  accounts: z.number().int().nonnegative(),
+  conversionRate: z.number().min(0).max(1).nullable(),
+})
+
+export const AdminMetricsResponseSchema = z.object({
+  data: z.object({
+    window: z.enum(['7d', '30d']),
+    generatedAt: IsoTimeSchema,
+    funnel: z.array(AdminFunnelStageSchema).length(6),
+    daily: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), starts: z.number().int().nonnegative(), completions: z.number().int().nonnegative() })),
+    sessions: z.array(z.object({ sessionId: SessionIdSchema, starts: z.number().int().nonnegative(), completions: z.number().int().nonnegative(), completionRate: z.number().min(0).max(1) })).max(10),
+    feedback: z.object({ total: z.number().int().nonnegative(), byStatus: z.record(AdminFeedbackStatusSchema, z.number().int().nonnegative()), byCategory: z.record(z.string(), z.number().int().nonnegative()) }).strict(),
+  }).strict(),
+}).strict()
+
 export type TrainingCompletion = z.infer<typeof TrainingCompletionSchema>
 export type AnalyticsEvent = z.infer<typeof AnalyticsEventSchema>
 export type AnalyticsBatchRequest = z.infer<typeof AnalyticsBatchRequestSchema>
@@ -256,3 +339,7 @@ export type LearningActivitySyncRecord = z.infer<typeof LearningActivitySyncReco
 export type SyncRequest = z.infer<typeof SyncRequestSchema>
 export type SyncSnapshot = z.infer<typeof SyncSnapshotSchema>
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>
+export type AdminContentDraft = z.infer<typeof AdminContentDraftSchema>
+export type AdminContentRelease = z.infer<typeof AdminContentReleaseSchema>
+export type AdminFeedback = z.infer<typeof AdminFeedbackSchema>
+export type AdminMetrics = z.infer<typeof AdminMetricsResponseSchema>['data']

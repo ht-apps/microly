@@ -1,5 +1,7 @@
 import { defineConfig } from '@tarojs/cli'
 
+const apiBaseUrl = (process.env.TARO_APP_API_BASE_URL ?? '').trim()
+
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>({
   projectName: 'microly',
@@ -13,11 +15,18 @@ export default defineConfig<'vite'>({
   },
   sourceRoot: 'src',
   outputRoot: 'dist',
+  env: {
+    TARO_APP_API_BASE_URL: JSON.stringify(apiBaseUrl)
+  },
   copy: {
     patterns: [
       {
         from: 'src/assets/share/challenge-cover.png',
         to: 'dist/assets/share/challenge-cover.png'
+      },
+      {
+        from: 'src/assets/brand/microly-mark.png',
+        to: 'dist/assets/brand/microly-mark.png'
       }
     ],
     options: {}

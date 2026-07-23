@@ -10,6 +10,8 @@ const ConfigSchema = z.object({
   WECHAT_APP_ID: z.string().min(1).optional(),
   WECHAT_APP_SECRET: z.string().min(1).optional(),
   IDENTITY_HASH_SECRET: z.string().min(32).optional(),
+  ADMIN_API_TOKEN: z.string().min(32).optional(),
+  ADMIN_ORIGINS: z.string().default('http://localhost:5173,http://127.0.0.1:5173'),
 }).superRefine((value, context) => {
   const configured = [
     value.WECHAT_APP_ID,
@@ -29,6 +31,7 @@ export interface ApiConfig {
   databaseUrl: string
   port: number
   wechat?: { appId: string; appSecret: string; identityHashSecret: string }
+  admin?: { token: string; origins: string[] }
 }
 
 export function readConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -41,6 +44,12 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env): ApiCon
           appId: parsed.WECHAT_APP_ID,
           appSecret: parsed.WECHAT_APP_SECRET,
           identityHashSecret: parsed.IDENTITY_HASH_SECRET,
+        }
+      : undefined,
+    admin: parsed.ADMIN_API_TOKEN
+      ? {
+          token: parsed.ADMIN_API_TOKEN,
+          origins: parsed.ADMIN_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
         }
       : undefined,
   }

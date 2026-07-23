@@ -72,7 +72,7 @@ export default function ChallengePage() {
         }
   ))
 
-  const openMicroly = () => Taro.switchTab({ url: '/pages/index/index' })
+  const openMicroly = () => Taro.switchTab({ url: '/pages/course/index' })
 
   if (!session || !content) {
     return (
@@ -84,7 +84,7 @@ export default function ChallengePage() {
             分享内容可能已经更新或下架，可以进入微习查看当前课程。
           </Text>
           <Button className='microly-button challenge-primary-button' onClick={openMicroly}>
-            打开微习
+            查看当前课程
           </Button>
         </View>
       </View>

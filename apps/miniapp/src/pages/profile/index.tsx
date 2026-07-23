@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Text, View } from '@tarojs/components'
+import { Button, Image, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
@@ -9,6 +9,8 @@ import { readProfileSnapshot } from '../../features/profile/profile-snapshot'
 import { readAccountStatus, upgradeToWechat } from '../../features/account/account-service'
 
 import './index.scss'
+
+const MICROLY_MARK_IMAGE_URL = '/assets/brand/microly-mark.png'
 
 export default function ProfilePage() {
   const [snapshot, setSnapshot] = useState(readProfileSnapshot)
@@ -63,7 +65,9 @@ export default function ProfilePage() {
       {account.networkEnabled && account.authType !== 'wechat' && (
         <View className='profile-login-card'>
           <View className='profile-login-card__heading'>
-            <View className='profile-login-card__badge'>微</View>
+            <View className='profile-login-card__badge'>
+              <Image className='profile-login-card__badge-image' src={MICROLY_MARK_IMAGE_URL} mode='aspectFit' />
+            </View>
             <View className='profile-login-card__copy'>
               <Text className='profile-login-card__title'>登录后，学习记录不丢失</Text>
               <Text className='profile-login-card__body'>同步进度、收藏与复习计划，可在其他设备继续学习。</Text>

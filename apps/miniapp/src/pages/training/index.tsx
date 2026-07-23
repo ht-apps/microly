@@ -245,22 +245,23 @@ export default function TrainingPage() {
     await Taro.switchTab({ url: '/pages/index/index' })
   }
 
+  const openCurrentCourse = () => Taro.switchTab({ url: '/pages/course/index' })
   const backToday = () => Taro.switchTab({ url: '/pages/index/index' })
 
   if (!session || !progress) {
     const errorBody = requestedEntry?.error
       ?? (requestedSessionId
-        ? '没有找到这组训练，请从课程页重新进入。'
+        ? '这组训练可能已经更新或下架，历史学习记录仍会保留。'
         : '当前没有可用的训练内容。')
 
     return (
       <View className='training-page training-page--centered'>
         <View className='training-error'>
           <Text className='card-eyebrow'>内容暂时不可用</Text>
-          <Text className='card-title'>训练内容没有通过校验</Text>
+          <Text className='card-title'>{requestedSessionId ? '这组训练已不可用' : '训练内容没有通过校验'}</Text>
           <Text className='training-error__body'>{errorBody}</Text>
-          <Button className='microly-button training-primary-button' onClick={backToday}>
-            返回首页
+          <Button className='microly-button training-primary-button' onClick={openCurrentCourse}>
+            查看当前课程
           </Button>
         </View>
       </View>

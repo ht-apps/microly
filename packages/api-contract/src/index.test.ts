@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { AnalyticsBatchRequestSchema, SyncRequestSchema, TrainingCompletionSchema } from './index'
+import {
+  AdminFeedbackUpdateRequestSchema,
+  AdminMetricsResponseSchema,
+  AdminPublishRequestSchema,
+  AnalyticsBatchRequestSchema,
+  SyncRequestSchema,
+  TrainingCompletionSchema,
+} from './index'
 
 const event = {
   eventId: '11111111-1111-4111-8111-111111111111',
@@ -52,5 +59,25 @@ describe('API contract', () => {
         completedAt: null, practiceText: '不应上传', practiceEvaluation: [],
       }],
     }).success).toBe(false)
+  })
+
+  it('严格校验管理写入与反馈状态', () => {
+    expect(AdminPublishRequestSchema.safeParse({ revision: 2, reason: '修正训练反馈' }).success).toBe(true)
+    expect(AdminPublishRequestSchema.safeParse({ revision: 2, reason: 'ok', token: 'secret' }).success).toBe(false)
+    expect(AdminFeedbackUpdateRequestSchema.safeParse({ status: 'resolved', internalNote: '已处理' }).success).toBe(true)
+    expect(AdminFeedbackUpdateRequestSchema.safeParse({ status: 'unknown' }).success).toBe(false)
+  })
+
+  it('指标响应不包含账号或原始事件', () => {
+    const value = {
+      data: {
+        window: '7d', generatedAt: '2026-07-23T10:00:00.000Z',
+        funnel: ['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success'].map((name, index) => ({ name, accounts: 6 - index, conversionRate: index ? 0.8 : null })),
+        daily: [], sessions: [],
+        feedback: { total: 0, byStatus: { new: 0, in_progress: 0, resolved: 0, dismissed: 0 }, byCategory: {} },
+      },
+    }
+    expect(AdminMetricsResponseSchema.safeParse(value).success).toBe(true)
+    expect(AdminMetricsResponseSchema.safeParse({ ...value, data: { ...value.data, accountId: '11111111-1111-4111-8111-111111111111' } }).success).toBe(false)
   })
 })

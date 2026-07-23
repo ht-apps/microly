@@ -58,7 +58,31 @@ export const contentReleases = pgTable('content_releases', {
   releaseVersion: integer('release_version').notNull().unique(),
   bundle: jsonb('bundle').$type<TrainingContentBundle>().notNull(),
   checksum: varchar('checksum', { length: 64 }).notNull(),
+  sourceDraftId: uuid('source_draft_id'),
+  createdFromVersion: integer('created_from_version'),
+  releaseReason: text('release_reason'),
   publishedAt: timestamp('published_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const contentDrafts = pgTable('content_drafts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  baseReleaseVersion: integer('base_release_version'),
+  bundle: jsonb('bundle').$type<unknown>().notNull(),
+  status: varchar('status', { length: 20 }).$type<'draft' | 'published' | 'abandoned'>().notNull().default('draft'),
+  revision: integer('revision').notNull().default(1),
+  publishedReleaseVersion: integer('published_release_version'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const adminAuditLogs = pgTable('admin_audit_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  action: varchar('action', { length: 60 }).notNull(),
+  targetType: varchar('target_type', { length: 40 }).notNull(),
+  targetId: text('target_id').notNull(),
+  reason: text('reason'),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export const trainingCompletions = pgTable('training_completions', {
@@ -138,7 +162,10 @@ export const feedback = pgTable('feedback', {
   sessionId: varchar('session_id', { length: 100 }),
   contentVersion: integer('content_version'),
   status: varchar('status', { length: 20 }).notNull().default('new'),
+  internalNote: text('internal_note'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
 })
 
 export type StoredTrainingCompletion = typeof trainingCompletions.$inferSelect
