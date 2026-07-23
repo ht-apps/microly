@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { AiEvaluation } from '@microly/api-contract'
 import { Button, Text, View } from '@tarojs/components'
 import Taro, { useRouter, useShareAppMessage } from '@tarojs/taro'
 
@@ -9,6 +10,16 @@ import {
   trainingContent,
 } from '../../data/training-content'
 import { flushAnalyticsOutbox, trackEvent } from '../../features/analytics/analytics-client'
+import { readAccountStatus, upgradeToWechat } from '../../features/account/account-service'
+import { shouldPromptWechatLogin } from '../../features/account/login-prompt'
+import {
+  getAiEvaluation,
+  rateAiEvaluation,
+  readAiAccessState,
+  submitAiEvaluation,
+} from '../../features/ai/ai-client'
+import type { AiAccessState } from '../../features/ai/ai-access'
+import { AI_FOREGROUND_WAIT_MS, remainingAiWaitSeconds } from '../../features/ai/ai-wait'
 import { createTrainingCompletedEvent } from '../../features/activity/activity-state'
 import { recordLearningActivity } from '../../features/activity/activity-storage'
 import {
@@ -68,6 +79,12 @@ export default function TrainingPage() {
   const [reviewDueAt, setReviewDueAt] = useState<string | null>(null)
   const [reviewCardIndex, setReviewCardIndex] = useState<number | null>(null)
   const [activityStorageWarning, setActivityStorageWarning] = useState(false)
+  const [aiAccess, setAiAccess] = useState<AiAccessState>(readAiAccessState)
+  const [aiEvaluation, setAiEvaluation] = useState<AiEvaluation | null>(null)
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiWaitUntil, setAiWaitUntil] = useState<number | null>(null)
+  const [aiWaitSeconds, setAiWaitSeconds] = useState(0)
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
 
   useShareAppMessage(() => (
     session
@@ -122,6 +139,46 @@ export default function TrainingPage() {
       : Taro.hideShareMenu()
     updateMenu.catch(() => undefined)
   }, [progress?.status, reviewCardIndex])
+
+  useEffect(() => {
+    const evaluation = aiEvaluation
+    if (!evaluation || !['queued', 'processing'].includes(evaluation.status)) return
+    const pollTimer = setInterval(() => {
+      void getAiEvaluation(evaluation.id).then((next) => {
+        if (!next) return
+        setAiEvaluation(next)
+        if (!['queued', 'processing'].includes(next.status)) {
+          setAiBusy(false)
+          setAiWaitUntil(null)
+          setAiWaitSeconds(0)
+          setAiMessage(next.status === 'succeeded' ? null : 'AI 服务暂时不可用，已展示安全的本地结构检查。')
+          trackEvent('ai_evaluation', {
+            sessionId: next.sessionId,
+            status: next.status === 'succeeded' ? 'succeeded' : next.status === 'blocked' ? 'blocked' : next.status === 'canceled' ? 'canceled' : 'degraded',
+            modelConfigRevision: next.result?.model?.configRevision,
+            latencyMs: next.latencyMs ?? undefined,
+          })
+          void flushAnalyticsOutbox()
+        }
+      })
+    }, 2000)
+    return () => clearInterval(pollTimer)
+  }, [aiEvaluation?.id, aiEvaluation?.status])
+
+  useEffect(() => {
+    if (aiWaitUntil === null) return
+    const updateRemaining = () => {
+      const remaining = remainingAiWaitSeconds(aiWaitUntil)
+      setAiWaitSeconds(remaining)
+      if (remaining === 0) {
+        setAiWaitUntil(null)
+        setAiMessage('AI 仍在生成，你可以先完成训练，稍后在复习页查看。')
+      }
+    }
+    updateRemaining()
+    const timer = setInterval(updateRemaining, 250)
+    return () => clearInterval(timer)
+  }, [aiWaitUntil])
 
   const applyAction = (action: TrainingAction) => {
     if (!session) {
@@ -198,7 +255,11 @@ export default function TrainingPage() {
         setReviewDueAt(review.item?.dueAt ?? null)
         if (review.writeFailed) setStorageWarning(true)
         const prompted = Taro.getStorageSync('microly:account:login-prompted:v1')
-        if (!prompted && isNetworkEnabled()) {
+        if (shouldPromptWechatLogin({
+          prompted: Boolean(prompted),
+          networkEnabled: isNetworkEnabled(),
+          authType: readAccountStatus().authType,
+        })) {
           Taro.setStorageSync('microly:account:login-prompted:v1', true)
           trackEvent('login_prompt', { entry: 'training_complete' })
           void Taro.showModal({
@@ -231,6 +292,69 @@ export default function TrainingPage() {
     setFavoriteStorageWarning(false)
     setIsPrincipleFavorite(result.isFavorite)
     void flushFullSync()
+  }
+
+  const requestAiEvaluation = async () => {
+    if (!session || !progress || aiBusy) return
+    const card = session.cards.find((item) => item.type === 'practice')
+    if (!card || progress.practiceText.trim().length < card.minLength) return
+    applyAction({ type: 'SUBMIT_PRACTICE' })
+    setAiBusy(true)
+    setAiMessage('正在安全提交，原文不会保存到云端。')
+    const response = await submitAiEvaluation(session, card, progress)
+    if (response.evaluation) {
+      setAiEvaluation(response.evaluation)
+      trackEvent('ai_evaluation', { sessionId: session.sessionId, status: 'submitted' })
+      void flushAnalyticsOutbox()
+      if (['queued', 'processing'].includes(response.evaluation.status)) {
+        const waitUntil = Date.now() + AI_FOREGROUND_WAIT_MS
+        setAiWaitUntil(waitUntil)
+        setAiWaitSeconds(remainingAiWaitSeconds(waitUntil))
+      } else {
+        setAiBusy(false)
+        setAiWaitUntil(null)
+        setAiWaitSeconds(0)
+      }
+      setAiMessage(response.evaluation.status === 'blocked' ? '请移除敏感或高风险信息后再试。' : null)
+      if (response.evaluation.status === 'blocked') {
+        trackEvent('ai_evaluation', { sessionId: session.sessionId, status: 'blocked' })
+        void flushAnalyticsOutbox()
+      }
+      return
+    }
+    setAiBusy(false)
+    const message = response.errorCode === 'ai_quota_exceeded'
+      ? '今天的 AI 点评额度已用完，已使用本地结构检查。'
+      : response.errorCode === 'wechat_login_required'
+        ? '微信登录已失效，请重新登录。'
+        : '联网点评暂时不可用，已使用本地结构检查。'
+    setAiMessage(message)
+    if (response.errorCode === 'ai_quota_exceeded') {
+      trackEvent('ai_evaluation', { sessionId: session.sessionId, status: 'quota_exceeded' })
+      void flushAnalyticsOutbox()
+    }
+  }
+
+  const loginAndRequestAi = async () => {
+    setAiBusy(true)
+    const loggedIn = await upgradeToWechat()
+    setAiBusy(false)
+    if (!loggedIn) {
+      setAiMessage('微信登录没有完成，仍可使用本地结构检查。')
+      return
+    }
+    setAiAccess('ready')
+    await requestAiEvaluation()
+  }
+
+  const rateEvaluation = async (helpful: boolean) => {
+    if (!aiEvaluation) return
+    const updated = await rateAiEvaluation(aiEvaluation.id, helpful, helpful ? 'actionable' : 'too_generic')
+    if (updated) {
+      setAiEvaluation(updated)
+      trackEvent('ai_evaluation_rating', { helpful })
+      void flushAnalyticsOutbox()
+    }
   }
 
   const returnToEntry = async () => {
@@ -345,6 +469,14 @@ export default function TrainingPage() {
             icon: 'none',
           })}
           reviewDueAt={reviewDueAt}
+          aiEvaluation={aiEvaluation}
+          aiBusy={aiBusy}
+          aiWaitSeconds={aiWaitSeconds}
+          aiMessage={aiMessage}
+          aiAccess={aiAccess}
+          onRequestAi={requestAiEvaluation}
+          onLoginForAi={loginAndRequestAi}
+          onRateAi={rateEvaluation}
         />
       )}
     </View>

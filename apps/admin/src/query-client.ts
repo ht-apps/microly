@@ -16,6 +16,8 @@ export const queryClient = new QueryClient({
 export const queryKeys = {
   metrics: (window: '7d' | '30d') => ['admin', 'metrics', window] as const,
   content: ['admin', 'content'] as const,
+  aiConfig: ['admin', 'ai-config'] as const,
+  aiMetrics: (window: '7d' | '30d') => ['admin', 'ai-metrics', window] as const,
   draft: (id: string) => ['admin', 'draft', id] as const,
   feedback: (filters: { status?: string; category?: string; page: number; pageSize: number }) =>
     ['admin', 'feedback', filters] as const,

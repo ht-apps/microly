@@ -72,7 +72,7 @@ export async function loginWithWechat() {
 
 export async function authorizedRequest<T>(options: {
   path: string
-  method: 'GET' | 'POST' | 'DELETE'
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   data?: unknown
 }) {
   const execute = async (refresh: boolean) => {

@@ -20,6 +20,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify'
 import { ZodError } from 'zod'
 
 import { registerAdminRoutes } from './admin.js'
+import { createDeepseekProvider, registerAiRoutes, type AiProvider } from './ai.js'
 import { createDatabase, type DatabaseContext } from './db/client.js'
 import {
   accounts,
@@ -188,6 +189,8 @@ export interface CreateAppOptions {
   wechat?: { appId: string; appSecret: string; identityHashSecret: string }
   exchangeWechatCode?: (code: string) => Promise<{ openid: string }>
   admin?: { token: string; origins: string[] }
+  ai?: { apiKey: string; inputHashSecret: string; baseUrl?: string }
+  aiProvider?: AiProvider
 }
 
 export function createApp(options: CreateAppOptions) {
@@ -219,6 +222,13 @@ export function createApp(options: CreateAppOptions) {
     } catch {
       return reply.status(503).send({ data: { process: 'ok', database: 'unavailable' } })
     }
+  })
+
+  const aiProvider = options.aiProvider ?? (options.ai ? createDeepseekProvider(options.ai.apiKey, options.ai.baseUrl) : undefined)
+  registerAiRoutes(app, database, {
+    provider: aiProvider,
+    inputHashSecret: options.ai?.inputHashSecret ?? (options.aiProvider ? 'integration-test-ai-input-secret-32chars' : undefined),
+    authenticate: (request, reply) => authenticate(request, reply, database),
   })
 
   app.get('/v1/content/current', async (request, reply) => {
@@ -403,7 +413,7 @@ export function createApp(options: CreateAppOptions) {
     return reply.send({ data: { accepted } })
   })
 
-  registerAdminRoutes(app, database, options.admin)
+  registerAdminRoutes(app, database, options.admin, { provider: aiProvider, configured: Boolean(options.ai || options.aiProvider) })
 
   return app
 }

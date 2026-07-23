@@ -1,4 +1,5 @@
 import { Button, Text, Textarea, View } from '@tarojs/components'
+import type { AiEvaluation } from '@microly/api-contract'
 import type {
   ChoiceCard,
   PracticeCard,
@@ -11,6 +12,8 @@ import type {
   TrainingAction,
   TrainingProgress,
 } from './training-state'
+import type { AiAccessState } from '../ai/ai-access'
+import { AI_FOREGROUND_WAIT_MS } from '../ai/ai-wait'
 
 interface TrainingCardRendererProps {
   session: TrainingSession
@@ -22,6 +25,14 @@ interface TrainingCardRendererProps {
   onToggleFavorite: () => void
   onShareUnavailable: () => void
   reviewDueAt?: string | null
+  aiEvaluation?: AiEvaluation | null
+  aiBusy?: boolean
+  aiWaitSeconds?: number
+  aiMessage?: string | null
+  aiAccess?: AiAccessState
+  onRequestAi?: () => void
+  onLoginForAi?: () => void
+  onRateAi?: (helpful: boolean) => void
 }
 
 const ratingMeta: Record<
@@ -121,6 +132,45 @@ function PracticeEvaluation({
       <Text className='practice-disclaimer'>{card.disclaimer}</Text>
     </View>
   )
+}
+
+function AiEvaluationView({ evaluation, card, waitSeconds = 0, onRate }: { evaluation: AiEvaluation; card: PracticeCard; waitSeconds?: number; onRate?: (helpful: boolean) => void }) {
+  if (!evaluation.result) {
+    const waitLimitSeconds = AI_FOREGROUND_WAIT_MS / 1000
+    const elapsedSeconds = Math.max(0, waitLimitSeconds - waitSeconds)
+    return <View className='ai-result ai-result--pending'>
+      <Text className='ai-result__title'>AI 正在认真点评</Text>
+      <Text className='ai-result__summary'>
+        {waitSeconds > 0
+          ? `已等待 ${elapsedSeconds} 秒，正在生成点评，请稍候。`
+          : '可以继续完成训练，结果稍后会出现在复习页。'}
+      </Text>
+    </View>
+  }
+  const result = evaluation.result
+  return <View className={`ai-result ai-result--${result.mode}`}>
+    <Text className='ai-result__eyebrow'>{result.mode === 'ai' ? 'AI 表达点评' : '规则降级结果'}</Text>
+    <Text className='ai-result__title'>{result.summary}</Text>
+    <View className='ai-dimension-list'>
+      {result.dimensions.map((dimension) => <View className={`ai-dimension ai-dimension--${dimension.level}`} key={dimension.dimensionId}>
+        <Text className='ai-dimension__title'>{card.dimensions.find((item) => item.id === dimension.dimensionId)?.title ?? dimension.dimensionId}</Text>
+        <Text className='ai-dimension__level'>{dimension.level === 'met' ? '已做到' : dimension.level === 'partial' ? '可加强' : '未体现'}</Text>
+        <Text className='ai-dimension__reason'>{dimension.reason}</Text>
+      </View>)}
+    </View>
+    {result.rewrite && <View className='reference-answer'>
+      <Text className='reference-answer__label'>AI 参考改写</Text>
+      <Text className='reference-answer__text'>{result.rewrite}</Text>
+    </View>}
+    {result.mode === 'ai' && <View className='ai-rating'>
+      <Text className='ai-rating__label'>{evaluation.rating ? '感谢反馈' : '这条点评有帮助吗？'}</Text>
+      {!evaluation.rating && <View className='ai-rating__actions'>
+        <Button className='microly-button ai-rating__button' onClick={() => onRate?.(true)}>有帮助</Button>
+        <Button className='microly-button ai-rating__button' onClick={() => onRate?.(false)}>没帮助</Button>
+      </View>}
+    </View>}
+    <Text className='practice-disclaimer'>AI 内容仅供学习参考，不代表唯一正确表达。</Text>
+  </View>
 }
 
 function PreviousButton({ onAction }: { onAction: (action: TrainingAction) => void }) {
@@ -263,6 +313,14 @@ export default function TrainingCardRenderer({
   onToggleFavorite,
   onShareUnavailable,
   reviewDueAt,
+  aiEvaluation,
+  aiBusy,
+  aiWaitSeconds = 0,
+  aiMessage,
+  aiAccess = 'unavailable',
+  onRequestAi,
+  onLoginForAi,
+  onRateAi,
 }: TrainingCardRendererProps) {
   const card = session.cards[progress.currentCardIndex]
 
@@ -418,6 +476,8 @@ export default function TrainingCardRenderer({
     case 'practice': {
       const textLength = progress.practiceText.trim().length
       const canSubmit = textLength >= card.minLength
+      const aiReady = aiAccess === 'ready'
+      const aiNeedsLogin = aiAccess === 'login_required'
 
       return (
         <View className='training-card'>
@@ -439,28 +499,49 @@ export default function TrainingCardRenderer({
               {progress.practiceText.length} / {card.maxLength}
             </Text>
           </View>
+          <Text className='practice-privacy-hint'>请勿填写真实姓名、联系方式、公司机密或其他敏感信息。点击 AI 点评后，原文会发送给 DeepSeek，但不会保存到云端。</Text>
           {!canSubmit && (
             <Text className='practice-hint'>至少输入 {card.minLength} 个字</Text>
           )}
-          {!progress.practiceEvaluation ? (
-            <Button
-              className='microly-button training-primary-button'
-              disabled={!canSubmit}
-              onClick={() => onAction({ type: 'SUBMIT_PRACTICE' })}
-            >
-              检查表达结构
-            </Button>
-          ) : (
+          {!progress.practiceEvaluation && !progress.practiceSkipped ? (
             <>
-              <PracticeEvaluation card={card} progress={progress} />
               <Button
                 className='microly-button training-primary-button'
+                disabled={!canSubmit || aiBusy || aiAccess === 'unavailable'}
+                onClick={aiReady ? onRequestAi : aiNeedsLogin ? onLoginForAi : undefined}
+              >
+                {aiBusy
+                  ? '正在提交…'
+                  : aiReady
+                    ? '获取 AI 点评'
+                    : aiNeedsLogin
+                      ? '微信登录获取 AI 点评'
+                      : 'AI 点评需联网使用'}
+              </Button>
+              {aiAccess === 'unavailable' && (
+                <Text className='ai-inline-message'>当前构建未配置联网服务，可继续使用本地结构检查。</Text>
+              )}
+              <Button className='microly-button training-secondary-button' disabled={!canSubmit} onClick={() => onAction({ type: 'SUBMIT_PRACTICE' })}>本地结构检查</Button>
+              <Button className='microly-button training-text-button' onClick={() => onAction({ type: 'SKIP_PRACTICE' })}>暂时跳过</Button>
+              {aiMessage && <Text className='ai-inline-message'>{aiMessage}</Text>}
+            </>
+          ) : progress.practiceEvaluation ? (
+            <>
+              {aiEvaluation ? <AiEvaluationView evaluation={aiEvaluation} card={card} waitSeconds={aiWaitSeconds} onRate={onRateAi} /> : <PracticeEvaluation card={card} progress={progress} />}
+              {aiMessage && <Text className='ai-inline-message'>{aiMessage}</Text>}
+              <Button
+                className='microly-button training-primary-button'
+                disabled={aiWaitSeconds > 0}
                 onClick={() => onAction({ type: 'COMPLETE' })}
               >
-                完成今天的训练
+                {aiWaitSeconds > 0 ? '点评生成中，请稍候' : '完成今天的训练'}
               </Button>
             </>
-          )}
+          ) : null}
+          {progress.practiceSkipped && <>
+            <View className='training-locked-notice'>已跳过主动表达，不影响完成本次训练。</View>
+            <Button className='microly-button training-primary-button' onClick={() => onAction({ type: 'COMPLETE' })}>完成今天的训练</Button>
+          </>}
           <PreviousButton onAction={onAction} />
         </View>
       )
@@ -496,6 +577,7 @@ export default function TrainingCardRenderer({
               <Text className='selected-summary__text'>{selectedOption.text}</Text>
             </View>
           )}
+          {aiEvaluation && <AiEvaluationView evaluation={aiEvaluation} card={session.cards.find((item): item is PracticeCard => item.type === 'practice')!} onRate={onRateAi} />}
           <View className='takeaway-card'>
             <Text className='takeaway-card__label'>带走这一句</Text>
             <Text className='takeaway-card__text'>{card.takeaway}</Text>

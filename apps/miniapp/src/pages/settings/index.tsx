@@ -52,6 +52,9 @@ export default function SettingsPage() {
       <Button className='microly-button settings-link' onClick={() => Taro.navigateTo({ url: '/pages/agreement/index' })}>
         <Text>用户协议</Text><Text className='settings-link__arrow'>›</Text>
       </Button>
+      <Button className='microly-button settings-link' onClick={() => Taro.navigateTo({ url: '/pages/ai-info/index' })}>
+        <Text>AI 功能说明</Text><Text className='settings-link__arrow'>›</Text>
+      </Button>
       <Button className='microly-button settings-link' onClick={() => Taro.navigateTo({ url: '/pages/feedback/index' })}>
         <Text>意见反馈</Text><Text className='settings-link__arrow'>›</Text>
       </Button>

@@ -5,6 +5,8 @@ import {
   AdminFeedbackListResponseSchema,
   AdminFeedbackResponseSchema,
   AdminMetricsResponseSchema,
+  AdminAiConfigResponseSchema,
+  AdminAiMetricsResponseSchema,
   AdminPublishResponseSchema,
   AdminSessionResponseSchema,
   AdminWithdrawResponseSchema,
@@ -14,6 +16,8 @@ import {
   type AdminFeedback,
   type AdminFeedbackList,
   type AdminMetrics,
+  type AdminAiModelConfig,
+  type AdminAiMetrics,
 } from '@microly/api-contract'
 
 const TOKEN_KEY = 'microly:admin-token'
@@ -116,6 +120,21 @@ export const adminApi = {
   updateFeedback: (token: string, id: string, status: AdminFeedback['status'], internalNote: string | null) => adminRequest<AdminFeedback>(
     `/v1/admin/feedback/${encodeURIComponent(id)}`, token,
     { ...json('PATCH', { status, internalNote }), schema: AdminFeedbackResponseSchema },
+  ),
+  getAiConfig: (token: string) => adminRequest<{ configured: boolean; activeModelId: string | null; models: AdminAiModelConfig[] }>(
+    '/v1/admin/ai/config', token, { schema: AdminAiConfigResponseSchema },
+  ),
+  refreshAiModels: (token: string) => adminRequest<{ configured: boolean; activeModelId: string | null; models: AdminAiModelConfig[] }>(
+    '/v1/admin/ai/models/refresh', token, { ...json('POST'), schema: AdminAiConfigResponseSchema },
+  ),
+  updateAiConfig: (token: string, input: {
+    revision: number; modelId: string; thinkingEnabled: boolean; maxTokens: number; temperature: number;
+    timeoutMs: number; dailyQuota: number; inputCacheHitPrice: number; inputCacheMissPrice: number; outputPrice: number; reason: string;
+  }) => adminRequest<{ configured: boolean; activeModelId: string | null; models: AdminAiModelConfig[] }>(
+    '/v1/admin/ai/config', token, { ...json('PUT', input), schema: AdminAiConfigResponseSchema },
+  ),
+  getAiMetrics: (token: string, window: '7d' | '30d') => adminRequest<AdminAiMetrics>(
+    `/v1/admin/ai/metrics?window=${window}`, token, { schema: AdminAiMetricsResponseSchema },
   ),
 }
 

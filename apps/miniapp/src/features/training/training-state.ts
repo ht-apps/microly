@@ -21,6 +21,7 @@ export interface TrainingProgress {
   otherFeedbackExpanded: boolean
   practiceText: string
   practiceEvaluation: PracticeEvaluationItem[] | null
+  practiceSkipped: boolean
   startedAt: string | null
   updatedAt: string
   completedAt: string | null
@@ -35,6 +36,7 @@ export type TrainingAction =
   | { type: 'TOGGLE_OTHER_FEEDBACK' }
   | { type: 'UPDATE_PRACTICE'; text: string }
   | { type: 'SUBMIT_PRACTICE' }
+  | { type: 'SKIP_PRACTICE' }
   | { type: 'COMPLETE' }
   | { type: 'RESET' }
 
@@ -58,6 +60,7 @@ export function createInitialProgress(
     otherFeedbackExpanded: false,
     practiceText: '',
     practiceEvaluation: null,
+    practiceSkipped: false,
     startedAt: null,
     updatedAt: timestamp,
     completedAt: null,
@@ -188,6 +191,7 @@ export function transitionTraining(
         ...progress,
         practiceText: action.text.slice(0, card.maxLength),
         practiceEvaluation: null,
+        practiceSkipped: false,
       }, now)
     }
     case 'SUBMIT_PRACTICE': {
@@ -201,10 +205,15 @@ export function transitionTraining(
       return withUpdatedAt({
         ...progress,
         practiceEvaluation: evaluatePractice(progress.practiceText, card),
+        practiceSkipped: false,
       }, now)
     }
+    case 'SKIP_PRACTICE': {
+      if (card.type !== 'practice') return progress
+      return withUpdatedAt({ ...progress, practiceEvaluation: null, practiceSkipped: true }, now)
+    }
     case 'COMPLETE': {
-      if (card.type !== 'practice' || !progress.practiceEvaluation) {
+      if (card.type !== 'practice' || (!progress.practiceEvaluation && !progress.practiceSkipped)) {
         return progress
       }
 
@@ -287,6 +296,7 @@ export function parseTrainingProgress(
     && typeof value.practiceText === 'string'
     && value.practiceText.length <= 200
     && evaluationIsValid
+    && typeof value.practiceSkipped === 'boolean'
     && (value.startedAt === null || typeof value.startedAt === 'string')
     && typeof value.updatedAt === 'string'
     && (value.completedAt === null || typeof value.completedAt === 'string')
@@ -335,7 +345,7 @@ export function parseTrainingProgress(
     && (
       value.currentCardIndex !== session.cards.length - 1
       || typeof value.completedAt !== 'string'
-      || value.practiceEvaluation === null
+      || (value.practiceEvaluation === null && !value.practiceSkipped)
     )
   ) {
     return {

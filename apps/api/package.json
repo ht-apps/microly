@@ -12,6 +12,7 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "eval:ai": "tsx src/scripts/eval-ai.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

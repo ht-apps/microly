@@ -6,6 +6,8 @@ import {
   AdminFeedbackListResponseSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminMetricsResponseSchema,
+  AiEvaluationCreateRequestSchema,
+  AiEvaluationResultSchema,
   AdminPublishRequestSchema,
   AnalyticsBatchRequestSchema,
   SyncRequestSchema,
@@ -99,5 +101,22 @@ describe('API contract', () => {
     expect(AdminFeedbackListResponseSchema.safeParse({ data: {
       items: [], total: 0, page: 1, pageSize: 20,
     } }).success).toBe(true)
+  })
+
+  it('严格校验 AI 原文请求和结构化安全结果', () => {
+    const request = {
+      requestId: '33333333-3333-4333-8333-333333333333', attemptId: 'attempt:test',
+      sessionId: 'boundary-decline-001', contentVersion: 1, practiceCardId: 'practice',
+      practiceText: '今天无法全部完成，我可以先交付核心结论，明天补齐。',
+    }
+    expect(AiEvaluationCreateRequestSchema.safeParse(request).success).toBe(true)
+    expect(AiEvaluationCreateRequestSchema.safeParse({ ...request, token: 'secret' }).success).toBe(false)
+    const blocked = {
+      mode: 'rule', rubricVersion: 'rubric-v1', dimensions: [{ dimensionId: 'goal', level: 'missing', reason: '请先修改输入。' }],
+      summary: '输入包含敏感信息。', rewrite: null,
+      safety: { allowed: false, reasonCode: 'company_secret' }, model: null,
+    }
+    expect(AiEvaluationResultSchema.safeParse(blocked).success).toBe(true)
+    expect(AiEvaluationResultSchema.safeParse({ ...blocked, rewrite: '不应生成改写' }).success).toBe(false)
   })
 })

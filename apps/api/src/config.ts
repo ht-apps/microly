@@ -12,6 +12,8 @@ const ConfigSchema = z.object({
   IDENTITY_HASH_SECRET: z.string().min(32).optional(),
   ADMIN_API_TOKEN: z.string().min(32).optional(),
   ADMIN_ORIGINS: z.string().default('http://localhost:5173,http://127.0.0.1:5173'),
+  DEEPSEEK_API_KEY: z.string().min(1).optional(),
+  AI_INPUT_HASH_SECRET: z.string().min(32).optional(),
 }).superRefine((value, context) => {
   const configured = [
     value.WECHAT_APP_ID,
@@ -25,6 +27,14 @@ const ConfigSchema = z.object({
       path: ['WECHAT_APP_ID'],
     })
   }
+  const aiConfigured = [value.DEEPSEEK_API_KEY, value.AI_INPUT_HASH_SECRET].filter(Boolean).length
+  if (aiConfigured !== 0 && aiConfigured !== 2) {
+    context.addIssue({
+      code: 'custom',
+      message: 'AI 点评配置必须同时提供 DEEPSEEK_API_KEY 和 AI_INPUT_HASH_SECRET。',
+      path: ['DEEPSEEK_API_KEY'],
+    })
+  }
 })
 
 export interface ApiConfig {
@@ -32,6 +42,7 @@ export interface ApiConfig {
   port: number
   wechat?: { appId: string; appSecret: string; identityHashSecret: string }
   admin?: { token: string; origins: string[] }
+  ai?: { apiKey: string; inputHashSecret: string; baseUrl: string }
 }
 
 export function readConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -51,6 +62,9 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env): ApiCon
           token: parsed.ADMIN_API_TOKEN,
           origins: parsed.ADMIN_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
         }
+      : undefined,
+    ai: parsed.DEEPSEEK_API_KEY && parsed.AI_INPUT_HASH_SECRET
+      ? { apiKey: parsed.DEEPSEEK_API_KEY, inputHashSecret: parsed.AI_INPUT_HASH_SECRET, baseUrl: 'https://api.deepseek.com' }
       : undefined,
   }
 }

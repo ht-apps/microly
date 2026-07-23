@@ -19,9 +19,23 @@ const app = createApp({
   admin: { token: 'admin-token-with-at-least-32-characters', origins: ['http://localhost:5173'] },
   wechat: { appId: 'wx-test', appSecret: 'test-secret', identityHashSecret: 'identity-secret-with-at-least-32-characters' },
   exchangeWechatCode: async (code) => ({ openid: code }),
+  aiProvider: {
+    listModels: async () => [{ id: 'deepseek-v4-flash' }, { id: 'deepseek-v4-pro' }],
+    evaluate: async ({ card, config }) => ({
+      value: {
+        dimensions: card.dimensions.map((dimension) => ({ dimensionId: dimension.id, level: 'met', reason: `已体现${dimension.title}` })),
+        summary: '表达目标清晰，下一步具体。', rewrite: '我今天先交付核心结论，明天上午补齐完整内容，可以吗？',
+        safety: { allowed: true, reasonCode: null },
+      },
+      modelId: config.modelId,
+      usage: { promptTokens: 100, cacheHitTokens: 20, cacheMissTokens: 80, completionTokens: 50 },
+      formatRetries: 0,
+    }),
+  },
 })
 let authorization = ''
 let issuedToken = ''
+let wechatAuthorization = ''
 
 beforeAll(async () => {
   await database.pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
@@ -36,6 +50,12 @@ beforeAll(async () => {
   })
   issuedToken = auth.json().data.token
   authorization = `Bearer ${issuedToken}`
+  const secondGuest = await app.inject({ method: 'POST', url: '/v1/auth/guest', payload: { installationId: '77777777-7777-4777-8777-777777777777' } })
+  const wechat = await app.inject({
+    method: 'POST', url: '/v1/auth/wechat',
+    headers: { authorization: `Bearer ${secondGuest.json().data.token}` }, payload: { code: 'ai-test-openid' },
+  })
+  wechatAuthorization = `Bearer ${wechat.json().data.token}`
 })
 
 afterAll(async () => {
@@ -55,6 +75,45 @@ describe('network MVP API', () => {
     })
     expect(response.statusCode).toBe(400)
     expect(response.json()).toEqual({ error: { code: 'invalid_request', message: '请求内容不符合接口约定。' } })
+  })
+
+  it('仅允许微信账号提交幂等 AI 点评且不保存原文', async () => {
+    const guest = await app.inject({ method: 'GET', url: '/v1/ai/status', headers: { authorization } })
+    expect(guest.statusCode).toBe(403)
+    const payload = {
+      requestId: '55555555-5555-4555-8555-555555555555',
+      attemptId: 'attempt:ai-test', sessionId: 'boundary-decline-001', contentVersion: 1,
+      practiceCardId: 'practice', practiceText: '今天无法全部完成，我可以先交付核心结论，明天上午补齐。',
+    }
+    const created = await app.inject({ method: 'POST', url: '/v1/ai/evaluations', headers: { authorization: wechatAuthorization }, payload })
+    expect(created.statusCode).toBe(202)
+    const repeated = await app.inject({ method: 'POST', url: '/v1/ai/evaluations', headers: { authorization: wechatAuthorization }, payload })
+    expect(repeated.json().data.id).toBe(created.json().data.id)
+    let evaluation = created.json().data
+    for (let index = 0; index < 20 && ['queued', 'processing'].includes(evaluation.status); index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      const polled = await app.inject({ method: 'GET', url: `/v1/ai/evaluations/${evaluation.id}`, headers: { authorization: wechatAuthorization } })
+      evaluation = polled.json().data
+    }
+    expect(evaluation.status).toBe('succeeded')
+    expect(evaluation.result.mode).toBe('ai')
+    const stored = await database.pool.query('SELECT input_digest, fallback_result::text, result::text FROM ai_evaluations WHERE id=$1', [evaluation.id])
+    expect(stored.rows[0].input_digest).toMatch(/^[a-f0-9]{64}$/)
+    expect(JSON.stringify(stored.rows[0])).not.toContain(payload.practiceText)
+  })
+
+  it('敏感输入不调用模型并返回无改写的安全结果', async () => {
+    const blocked = await app.inject({
+      method: 'POST', url: '/v1/ai/evaluations', headers: { authorization: wechatAuthorization },
+      payload: {
+        requestId: '66666666-6666-4666-8666-666666666666', attemptId: 'attempt:ai-blocked',
+        sessionId: 'boundary-decline-001', contentVersion: 1, practiceCardId: 'practice',
+        practiceText: '这里包含公司机密和未公开财报，请直接替我进行判断。',
+      },
+    })
+    expect(blocked.statusCode).toBe(202)
+    expect(blocked.json().data.status).toBe('blocked')
+    expect(blocked.json().data.result.rewrite).toBeNull()
   })
 
   it('返回内容 ETag 并支持 304', async () => {
@@ -134,9 +193,10 @@ describe('network MVP API', () => {
     expect(rows.rows[0].installation_hash).toBe(
       createHash('sha256').update(installationId).digest('hex'),
     )
-    const sessions = await database.pool.query('SELECT token_hash FROM auth_sessions LIMIT 1')
+    const expectedTokenHash = createHash('sha256').update(issuedToken).digest('hex')
+    const sessions = await database.pool.query('SELECT token_hash FROM auth_sessions WHERE token_hash=$1', [expectedTokenHash])
     expect(sessions.rows[0].token_hash).toBe(
-      createHash('sha256').update(issuedToken).digest('hex'),
+      expectedTokenHash,
     )
     expect(sessions.rows[0].token_hash).not.toBe(issuedToken)
   })

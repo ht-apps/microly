@@ -105,6 +105,13 @@ const LoginPromptPropertiesSchema = z.object({ entry: z.enum(['training_complete
 const WechatLoginSuccessPropertiesSchema = z.object({ merged: z.boolean() }).strict()
 const SyncSuccessPropertiesSchema = z.object({ recordCount: z.number().int().nonnegative() }).strict()
 const FeedbackSubmitPropertiesSchema = z.object({ category: z.enum(['content_error', 'product_suggestion', 'inappropriate_content']) }).strict()
+const AiEvaluationPropertiesSchema = z.object({
+  sessionId: SessionIdSchema,
+  status: z.enum(['submitted', 'succeeded', 'degraded', 'blocked', 'quota_exceeded', 'canceled']),
+  modelConfigRevision: z.number().int().positive().optional(),
+  latencyMs: z.number().int().nonnegative().optional(),
+}).strict()
+const AiEvaluationRatingPropertiesSchema = z.object({ helpful: z.boolean() }).strict()
 
 function event<Name extends string, Schema extends z.ZodType>(name: Name, properties: Schema) {
   return z.object({
@@ -126,6 +133,8 @@ export const AnalyticsEventSchema = z.discriminatedUnion('name', [
   event('wechat_login_success', WechatLoginSuccessPropertiesSchema),
   event('sync_success', SyncSuccessPropertiesSchema),
   event('feedback_submit', FeedbackSubmitPropertiesSchema),
+  event('ai_evaluation', AiEvaluationPropertiesSchema),
+  event('ai_evaluation_rating', AiEvaluationRatingPropertiesSchema),
 ])
 
 export const AnalyticsBatchRequestSchema = z.object({
@@ -243,6 +252,137 @@ export const FeedbackRequestSchema = z.object({
 export const FeedbackResponseSchema = z.object({
   data: z.object({ feedbackId: z.uuid(), status: z.literal('new') }),
 })
+
+export const AiEvaluationStatusSchema = z.enum([
+  'queued', 'processing', 'succeeded', 'degraded', 'blocked', 'canceled',
+])
+export const AiDimensionLevelSchema = z.enum(['met', 'partial', 'missing'])
+export const AiSafetyReasonSchema = z.enum([
+  'personal_contact', 'company_secret', 'high_risk', 'prompt_injection', 'provider_safety',
+])
+export const AiEvaluationDimensionSchema = z.object({
+  dimensionId: SessionIdSchema,
+  level: AiDimensionLevelSchema,
+  reason: z.string().trim().min(1).max(160),
+}).strict()
+export const AiEvaluationResultSchema = z.object({
+  mode: z.enum(['ai', 'rule']),
+  rubricVersion: IdentifierSchema,
+  dimensions: z.array(AiEvaluationDimensionSchema).min(1).max(4),
+  summary: z.string().trim().min(1).max(200),
+  rewrite: z.string().trim().min(1).max(300).nullable(),
+  safety: z.object({
+    allowed: z.boolean(),
+    reasonCode: AiSafetyReasonSchema.nullable(),
+  }).strict(),
+  model: z.object({
+    provider: z.literal('deepseek'),
+    modelId: z.string().min(1).max(100),
+    configRevision: z.number().int().positive(),
+    promptVersion: z.string().min(1).max(80),
+  }).strict().nullable(),
+}).strict().superRefine((value, context) => {
+  if (!value.safety.allowed && value.rewrite !== null) {
+    context.addIssue({ code: 'custom', message: '安全拦截结果不能包含参考改写。', path: ['rewrite'] })
+  }
+  if (value.safety.allowed && value.safety.reasonCode !== null) {
+    context.addIssue({ code: 'custom', message: '安全通过时不能包含拦截原因。', path: ['safety', 'reasonCode'] })
+  }
+})
+
+export const AiEvaluationCreateRequestSchema = z.object({
+  requestId: z.uuid(),
+  attemptId: IdentifierSchema,
+  sessionId: SessionIdSchema,
+  contentVersion: ContentVersionSchema,
+  practiceCardId: SessionIdSchema,
+  practiceText: z.string().trim().min(10).max(200),
+}).strict()
+
+export const AiEvaluationSchema = z.object({
+  id: z.uuid(),
+  requestId: z.uuid(),
+  attemptId: IdentifierSchema,
+  sessionId: SessionIdSchema,
+  contentVersion: ContentVersionSchema,
+  practiceCardId: SessionIdSchema,
+  status: AiEvaluationStatusSchema,
+  result: AiEvaluationResultSchema.nullable(),
+  failureCode: z.string().max(80).nullable(),
+  latencyMs: z.number().int().nonnegative().nullable(),
+  createdAt: IsoTimeSchema,
+  completedAt: IsoTimeSchema.nullable(),
+  rating: z.object({ helpful: z.boolean(), reason: z.enum([
+    'specific', 'actionable', 'accurate', 'too_generic', 'inaccurate', 'inappropriate',
+  ]).nullable() }).strict().nullable(),
+}).strict()
+
+export const AiStatusResponseSchema = z.object({ data: z.object({
+  enabled: z.boolean(),
+  used: z.number().int().nonnegative(),
+  limit: z.number().int().positive(),
+  remaining: z.number().int().nonnegative(),
+  resetAt: IsoTimeSchema,
+  modelId: z.string().nullable(),
+}).strict() }).strict()
+export const AiEvaluationResponseSchema = z.object({ data: AiEvaluationSchema }).strict()
+export const AiEvaluationListResponseSchema = z.object({ data: z.object({
+  items: z.array(AiEvaluationSchema),
+  nextCursor: z.uuid().nullable(),
+}).strict() }).strict()
+export const AiEvaluationRatingRequestSchema = z.object({
+  helpful: z.boolean(),
+  reason: z.enum(['specific', 'actionable', 'accurate', 'too_generic', 'inaccurate', 'inappropriate']).nullable().optional(),
+}).strict()
+
+export const AdminAiModelConfigSchema = z.object({
+  id: z.uuid(),
+  provider: z.literal('deepseek'),
+  modelId: z.string().min(1).max(100),
+  displayName: z.string().min(1).max(120),
+  thinkingEnabled: z.boolean(),
+  maxTokens: z.number().int().min(100).max(4000),
+  temperature: z.number().min(0).max(2),
+  timeoutMs: z.number().int().min(5000).max(60000),
+  dailyQuota: z.number().int().min(1).max(100),
+  inputCacheHitPrice: z.number().nonnegative(),
+  inputCacheMissPrice: z.number().nonnegative(),
+  outputPrice: z.number().nonnegative(),
+  active: z.boolean(),
+  revision: z.number().int().positive(),
+  updatedAt: IsoTimeSchema,
+}).strict()
+export const AdminAiConfigResponseSchema = z.object({ data: z.object({
+  configured: z.boolean(),
+  activeModelId: z.string().nullable(),
+  models: z.array(AdminAiModelConfigSchema),
+}).strict() }).strict()
+export const AdminAiConfigUpdateRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  modelId: z.string().min(1).max(100),
+  thinkingEnabled: z.boolean(),
+  maxTokens: z.number().int().min(100).max(4000),
+  temperature: z.number().min(0).max(2),
+  timeoutMs: z.number().int().min(5000).max(60000),
+  dailyQuota: z.number().int().min(1).max(100),
+  inputCacheHitPrice: z.number().nonnegative(),
+  inputCacheMissPrice: z.number().nonnegative(),
+  outputPrice: z.number().nonnegative(),
+  reason: z.string().trim().min(3).max(300),
+}).strict()
+export const AdminAiMetricsResponseSchema = z.object({ data: z.object({
+  window: z.enum(['7d', '30d']),
+  total: z.number().int().nonnegative(),
+  byStatus: z.record(AiEvaluationStatusSchema, z.number().int().nonnegative()),
+  latencyP50: z.number().nonnegative().nullable(),
+  latencyP95: z.number().nonnegative().nullable(),
+  promptTokens: z.number().int().nonnegative(),
+  completionTokens: z.number().int().nonnegative(),
+  estimatedCostUsd: z.number().nonnegative(),
+  formatRetryRate: z.number().min(0).max(1),
+  helpfulRate: z.number().min(0).max(1).nullable(),
+  models: z.array(z.object({ modelId: z.string(), count: z.number().int().nonnegative() }).strict()),
+}).strict() }).strict()
 
 export const AdminFeedbackStatusSchema = z.enum(['new', 'in_progress', 'resolved', 'dismissed'])
 export const AdminDraftStatusSchema = z.enum(['draft', 'published', 'abandoned'])
@@ -387,6 +527,11 @@ export type LearningActivitySyncRecord = z.infer<typeof LearningActivitySyncReco
 export type SyncRequest = z.infer<typeof SyncRequestSchema>
 export type SyncSnapshot = z.infer<typeof SyncSnapshotSchema>
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>
+export type AiEvaluationResult = z.infer<typeof AiEvaluationResultSchema>
+export type AiEvaluation = z.infer<typeof AiEvaluationSchema>
+export type AiEvaluationCreateRequest = z.infer<typeof AiEvaluationCreateRequestSchema>
+export type AdminAiModelConfig = z.infer<typeof AdminAiModelConfigSchema>
+export type AdminAiMetrics = z.infer<typeof AdminAiMetricsResponseSchema>['data']
 export type AdminContentDraft = z.infer<typeof AdminContentDraftSchema>
 export type AdminContentRelease = z.infer<typeof AdminContentReleaseSchema>
 export type AdminFeedback = z.infer<typeof AdminFeedbackSchema>

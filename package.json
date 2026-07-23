@@ -20,6 +20,7 @@
     "db:seed": "DATABASE_URL=postgresql://microly:microly@localhost:5432/microly pnpm --filter @microly/api db:seed",
     "db:test:up": "docker compose --profile test up -d postgres-test",
     "test:integration:api": "DATABASE_URL=postgresql://microly:microly@localhost:5433/microly_test pnpm --filter @microly/api test:integration",
+    "eval:ai": "pnpm build:packages && pnpm --filter @microly/api eval:ai",
     "build:miniapp": "pnpm build:packages && pnpm --filter @microly/miniapp build:weapp",
     "build:api": "pnpm build:packages && pnpm --filter @microly/api build",
     "build:admin": "pnpm build:packages && pnpm --filter @microly/admin build",

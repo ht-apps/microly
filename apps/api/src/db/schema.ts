@@ -10,6 +10,7 @@ import type {
 import type { TrainingContentBundle } from '@microly/content-schema'
 import {
   boolean,
+  doublePrecision,
   integer,
   jsonb,
   pgTable,
@@ -19,6 +20,7 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core'
+import type { AiEvaluationResult } from '@microly/api-contract'
 
 export const accounts = pgTable('accounts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -166,6 +168,65 @@ export const feedback = pgTable('feedback', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+})
+
+export const aiModelConfigs = pgTable('ai_model_configs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  provider: varchar('provider', { length: 30 }).$type<'deepseek'>().notNull().default('deepseek'),
+  modelId: varchar('model_id', { length: 100 }).notNull().unique(),
+  displayName: varchar('display_name', { length: 120 }).notNull(),
+  thinkingEnabled: boolean('thinking_enabled').notNull().default(false),
+  maxTokens: integer('max_tokens').notNull().default(800),
+  temperature: doublePrecision('temperature').notNull().default(0.2),
+  timeoutMs: integer('timeout_ms').notNull().default(30000),
+  dailyQuota: integer('daily_quota').notNull().default(5),
+  inputCacheHitPrice: doublePrecision('input_cache_hit_price').notNull().default(0),
+  inputCacheMissPrice: doublePrecision('input_cache_miss_price').notNull().default(0),
+  outputPrice: doublePrecision('output_price').notNull().default(0),
+  active: boolean('active').notNull().default(false),
+  revision: integer('revision').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const aiEvaluations = pgTable('ai_evaluations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  requestId: uuid('request_id').notNull(),
+  attemptId: text('attempt_id').notNull(),
+  sessionId: varchar('session_id', { length: 100 }).notNull(),
+  contentVersion: integer('content_version').notNull(),
+  practiceCardId: varchar('practice_card_id', { length: 100 }).notNull(),
+  inputDigest: varchar('input_digest', { length: 64 }).notNull(),
+  status: varchar('status', { length: 20 }).$type<'queued' | 'processing' | 'succeeded' | 'degraded' | 'blocked' | 'canceled'>().notNull(),
+  fallbackResult: jsonb('fallback_result').$type<AiEvaluationResult>().notNull(),
+  result: jsonb('result').$type<AiEvaluationResult>(),
+  provider: varchar('provider', { length: 30 }).notNull().default('deepseek'),
+  modelId: varchar('model_id', { length: 100 }).notNull(),
+  configRevision: integer('config_revision').notNull(),
+  promptVersion: varchar('prompt_version', { length: 80 }).notNull(),
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  promptCacheHitTokens: integer('prompt_cache_hit_tokens').notNull().default(0),
+  promptCacheMissTokens: integer('prompt_cache_miss_tokens').notNull().default(0),
+  completionTokens: integer('completion_tokens').notNull().default(0),
+  estimatedCostUsd: doublePrecision('estimated_cost_usd').notNull().default(0),
+  latencyMs: integer('latency_ms'),
+  formatRetries: integer('format_retries').notNull().default(0),
+  failureCode: varchar('failure_code', { length: 80 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+}, (table) => [
+  uniqueIndex('ai_evaluations_account_request_idx').on(table.accountId, table.requestId),
+  uniqueIndex('ai_evaluations_account_attempt_card_idx').on(table.accountId, table.attemptId, table.practiceCardId),
+])
+
+export const aiEvaluationRatings = pgTable('ai_evaluation_ratings', {
+  evaluationId: uuid('evaluation_id').primaryKey().references(() => aiEvaluations.id, { onDelete: 'cascade' }),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  helpful: boolean('helpful').notNull(),
+  reason: varchar('reason', { length: 40 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export type StoredTrainingCompletion = typeof trainingCompletions.$inferSelect

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { AiEvaluation } from '@microly/api-contract'
 import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
@@ -14,6 +15,7 @@ import {
 import { readReviewSnapshot } from '../../features/review/review-snapshot'
 import { saveReviewAnswer } from '../../features/review/review-storage'
 import { flushFullSync } from '../../features/sync/state-sync'
+import { canUseAi, listAiEvaluations } from '../../features/ai/ai-client'
 import {
   createReviewRunState,
   transitionReviewRun,
@@ -33,6 +35,7 @@ export default function ReviewPage() {
   const [activitySummary, setActivitySummary] = useState(
     () => readLearningActivitySnapshot().summary,
   )
+  const [aiEvaluations, setAiEvaluations] = useState<AiEvaluation[]>([])
 
   const returnToEntry = async () => {
     try {
@@ -48,6 +51,7 @@ export default function ReviewPage() {
 
   useDidShow(() => {
     if (view === 'overview') setSnapshot(readReviewSnapshot())
+    if (canUseAi()) void listAiEvaluations().then(setAiEvaluations)
   })
 
   const startReview = (items: ResolvedReviewItem[]) => {
@@ -325,6 +329,29 @@ export default function ReviewPage() {
           </Text>
         </View>
       )}
+
+      {aiEvaluations.length > 0 && <View className='review-section ai-history'>
+        <View className='review-section__topline'>
+          <Text className='review-section__title'>AI 点评记录</Text>
+          <Text className='review-section__count'>{aiEvaluations.length} 条</Text>
+        </View>
+        <Text className='review-section__body'>主动表达原文仅保存在提交设备，这里只同步结构化点评。</Text>
+        {aiEvaluations.map((evaluation) => {
+          const result = evaluation.result
+          const session = trainingContent.sessions[evaluation.sessionId]
+          return <View className='ai-history__item' key={evaluation.id}>
+            <Text className='ai-history__session'>{session?.title ?? evaluation.sessionId}</Text>
+            <Text className='ai-history__status'>{evaluation.status === 'succeeded' ? 'AI 点评' : evaluation.status === 'processing' || evaluation.status === 'queued' ? '生成中' : '规则结果'}</Text>
+            {result && <>
+              <Text className='ai-history__summary'>{result.summary}</Text>
+              {result.dimensions.map((dimension) => <Text className='ai-history__dimension' key={dimension.dimensionId}>
+                {dimension.level === 'met' ? '✓' : dimension.level === 'partial' ? '△' : '＋'} {dimension.reason}
+              </Text>)}
+              {result.rewrite && <View className='review-reference'><Text className='review-reference__label'>参考改写</Text><Text className='review-reference__text'>{result.rewrite}</Text></View>}
+            </>}
+          </View>
+        })}
+      </View>}
     </View>
   )
 }

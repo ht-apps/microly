@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 
 import {
+  AdminAiConfigUpdateRequestSchema,
   AdminDraftCreateRequestSchema,
   AdminDraftUpdateRequestSchema,
   AdminFeedbackStatusSchema,
@@ -14,6 +15,7 @@ import { z } from 'zod'
 
 import type { DatabaseContext } from './db/client.js'
 import { checksumBundle } from './db/seed.js'
+import type { AiProvider } from './ai.js'
 
 const feedbackCategories = ['content_error', 'product_suggestion', 'inappropriate_content'] as const
 const funnelNames = ['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success'] as const
@@ -174,7 +176,7 @@ async function publishDraft(database: DatabaseContext, draftId: string, revision
   }
 }
 
-export function registerAdminRoutes(app: FastifyInstance, database: DatabaseContext, admin?: AdminOptions) {
+export function registerAdminRoutes(app: FastifyInstance, database: DatabaseContext, admin?: AdminOptions, ai?: { provider?: AiProvider; configured: boolean }) {
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin
     if (admin && origin && admin.origins.includes(origin)) {
@@ -422,6 +424,118 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       daily: daily.rows.map((row) => ({ date: row.date, starts: row.starts, completions: row.completions })),
       sessions: sessions.rows.map((row) => ({ sessionId: row.session_id, starts: row.starts, completions: row.completions, completionRate: row.starts ? Math.min(1, row.completions / row.starts) : 0 })),
       feedback: { total, byStatus, byCategory },
+    } })
+  })
+
+  const serializeAiConfig = (row: Record<string, any>) => ({
+    id: row.id,
+    provider: row.provider,
+    modelId: row.model_id,
+    displayName: row.display_name,
+    thinkingEnabled: row.thinking_enabled,
+    maxTokens: row.max_tokens,
+    temperature: row.temperature,
+    timeoutMs: row.timeout_ms,
+    dailyQuota: row.daily_quota,
+    inputCacheHitPrice: row.input_cache_hit_price,
+    inputCacheMissPrice: row.input_cache_miss_price,
+    outputPrice: row.output_price,
+    active: row.active,
+    revision: row.revision,
+    updatedAt: row.updated_at.toISOString(),
+  })
+
+  app.get('/v1/admin/ai/config', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const result = await database.pool.query('SELECT * FROM ai_model_configs ORDER BY active DESC, model_id')
+    return reply.send({ data: {
+      configured: ai?.configured ?? false,
+      activeModelId: result.rows.find((row) => row.active)?.model_id ?? null,
+      models: result.rows.map(serializeAiConfig),
+    } })
+  })
+
+  app.post('/v1/admin/ai/models/refresh', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    if (!ai?.provider) return sendError(reply, 503, 'ai_not_configured', '尚未配置 DeepSeek API Key。')
+    let models: Array<{ id: string; name?: string }>
+    try { models = await ai.provider.listModels() } catch { return sendError(reply, 502, 'ai_provider_unavailable', '暂时无法同步 DeepSeek 模型。') }
+    for (const model of models.filter((item) => /^deepseek-[a-z0-9-]+$/.test(item.id))) {
+      await database.pool.query(`INSERT INTO ai_model_configs (model_id, display_name)
+        VALUES ($1,$2) ON CONFLICT (model_id) DO UPDATE SET display_name=excluded.display_name, updated_at=now()`,
+      [model.id, model.name ?? model.id])
+    }
+    const result = await database.pool.query('SELECT * FROM ai_model_configs ORDER BY active DESC, model_id')
+    return reply.send({ data: {
+      configured: true,
+      activeModelId: result.rows.find((row) => row.active)?.model_id ?? null,
+      models: result.rows.map(serializeAiConfig),
+    } })
+  })
+
+  app.put('/v1/admin/ai/config', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const input = AdminAiConfigUpdateRequestSchema.parse(request.body)
+    const client = await database.pool.connect()
+    try {
+      await client.query('BEGIN')
+      const target = await client.query('SELECT * FROM ai_model_configs WHERE model_id=$1 FOR UPDATE', [input.modelId])
+      if (!target.rows[0]) { await client.query('ROLLBACK'); return sendError(reply, 404, 'ai_model_not_found', '模型不存在，请先同步模型列表。') }
+      if (target.rows[0].revision !== input.revision) { await client.query('ROLLBACK'); return sendError(reply, 409, 'ai_config_conflict', '模型配置已更新，请重新加载。') }
+      await client.query('UPDATE ai_model_configs SET active=false WHERE active=true')
+      const updated = await client.query(`UPDATE ai_model_configs SET active=true, thinking_enabled=$2,
+        max_tokens=$3, temperature=$4, timeout_ms=$5, daily_quota=$6,
+        input_cache_hit_price=$7, input_cache_miss_price=$8, output_price=$9,
+        revision=revision+1, updated_at=now() WHERE model_id=$1 RETURNING *`,
+      [input.modelId, input.thinkingEnabled, input.maxTokens, input.temperature, input.timeoutMs, input.dailyQuota,
+        input.inputCacheHitPrice, input.inputCacheMissPrice, input.outputPrice])
+      await client.query(`INSERT INTO admin_audit_logs (action, target_type, target_id, reason, metadata)
+        VALUES ('ai.model.activate','ai_model',$1,$2,$3::jsonb)`, [input.modelId, input.reason, JSON.stringify({ revision: updated.rows[0].revision })])
+      await client.query('COMMIT')
+    } catch (cause) {
+      await client.query('ROLLBACK')
+      throw cause
+    } finally { client.release() }
+    const result = await database.pool.query('SELECT * FROM ai_model_configs ORDER BY active DESC, model_id')
+    return reply.send({ data: { configured: ai?.configured ?? false, activeModelId: input.modelId, models: result.rows.map(serializeAiConfig) } })
+  })
+
+  app.get('/v1/admin/ai/metrics', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { window } = z.object({ window: z.enum(['7d', '30d']).default('7d') }).parse(request.query)
+    const days = window === '7d' ? 7 : 30
+    const [summary, statuses, models, ratings] = await Promise.all([
+      database.pool.query(`SELECT count(*)::int total,
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) latency_p50,
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) latency_p95,
+        coalesce(sum(prompt_tokens),0)::int prompt_tokens,
+        coalesce(sum(completion_tokens),0)::int completion_tokens,
+        coalesce(sum(estimated_cost_usd),0)::float estimated_cost_usd,
+        coalesce(sum(format_retries),0)::int format_retries
+        FROM ai_evaluations WHERE created_at >= now() - ($1::int * interval '1 day')`, [days]),
+      database.pool.query(`SELECT status, count(*)::int count FROM ai_evaluations
+        WHERE created_at >= now() - ($1::int * interval '1 day') GROUP BY status`, [days]),
+      database.pool.query(`SELECT model_id, count(*)::int count FROM ai_evaluations
+        WHERE created_at >= now() - ($1::int * interval '1 day') GROUP BY model_id ORDER BY count DESC`, [days]),
+      database.pool.query(`SELECT count(*)::int total, count(*) FILTER (WHERE helpful)::int helpful
+        FROM ai_evaluation_ratings WHERE updated_at >= now() - ($1::int * interval '1 day')`, [days]),
+    ])
+    const row = summary.rows[0]
+    const byStatus = { queued: 0, processing: 0, succeeded: 0, degraded: 0, blocked: 0, canceled: 0 }
+    statuses.rows.forEach((item) => { byStatus[item.status as keyof typeof byStatus] = Number(item.count) })
+    const rating = ratings.rows[0]
+    return reply.send({ data: {
+      window,
+      total: Number(row.total),
+      byStatus,
+      latencyP50: row.latency_p50 === null ? null : Number(row.latency_p50),
+      latencyP95: row.latency_p95 === null ? null : Number(row.latency_p95),
+      promptTokens: Number(row.prompt_tokens),
+      completionTokens: Number(row.completion_tokens),
+      estimatedCostUsd: Number(row.estimated_cost_usd),
+      formatRetryRate: row.total ? Math.min(1, Number(row.format_retries) / Number(row.total)) : 0,
+      helpfulRate: rating.total ? Number(rating.helpful) / Number(rating.total) : null,
+      models: models.rows.map((item) => ({ modelId: item.model_id, count: Number(item.count) })),
     } })
   })
 }

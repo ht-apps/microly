@@ -11,6 +11,7 @@ export default defineAppConfig({
     'pages/training/index',
     'pages/settings/index',
     'pages/privacy/index',
+    'pages/ai-info/index',
     'pages/agreement/index',
     'pages/feedback/index'
   ],

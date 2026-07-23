@@ -132,6 +132,8 @@
 .feedback-drawer-heading { margin-bottom: 18px; }
 .feedback-detail-copy { margin: 18px 0 24px; padding: 16px; background: #f7f7fa; border-radius: 12px; line-height: 1.75; white-space: pre-wrap; }
 .feedback-note-form { margin-top: 24px; }
+.ai-admin-grid { margin-top: 18px; }
+.full-width { width: 100%; }
 
 @media (max-width: 1280px) {
   .content-workbench { overflow-x: auto; }
