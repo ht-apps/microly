@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
-import Taro, { useRouter } from '@tarojs/taro'
+import Taro, { useRouter, useShareAppMessage } from '@tarojs/taro'
 
 import {
   getFirstAvailableTraining,
@@ -10,6 +10,10 @@ import {
 } from '../../data/training-content'
 import { createTrainingCompletedEvent } from '../../features/activity/activity-state'
 import { recordLearningActivity } from '../../features/activity/activity-storage'
+import {
+  CHALLENGE_SHARE_IMAGE_URL,
+  createChallengeSharePayload,
+} from '../../features/challenge/challenge-share'
 import { isSessionFavorite } from '../../features/favorite/favorite-state'
 import {
   setSessionFavorite,
@@ -58,6 +62,16 @@ export default function TrainingPage() {
   const [reviewCardIndex, setReviewCardIndex] = useState<number | null>(null)
   const [activityStorageWarning, setActivityStorageWarning] = useState(false)
 
+  useShareAppMessage(() => (
+    session
+      ? createChallengeSharePayload(session)
+      : {
+          title: '一句话情景挑战｜微习 Microly',
+          path: '/pages/onboarding/index',
+          imageUrl: CHALLENGE_SHARE_IMAGE_URL,
+        }
+  ))
+
   useEffect(() => {
     if (!session) {
       return
@@ -91,6 +105,16 @@ export default function TrainingPage() {
       setStorageWarning(true)
     }
   }, [session])
+
+  useEffect(() => {
+    if (process.env.TARO_ENV !== 'weapp') return
+    const shouldShowShare = progress?.status === 'completed'
+      && reviewCardIndex === null
+    const updateMenu = shouldShowShare
+      ? Taro.showShareMenu({})
+      : Taro.hideShareMenu()
+    updateMenu.catch(() => undefined)
+  }, [progress?.status, reviewCardIndex])
 
   const applyAction = (action: TrainingAction) => {
     if (!session) {
@@ -262,6 +286,10 @@ export default function TrainingPage() {
           onStartReview={() => setReviewCardIndex(0)}
           isPrincipleFavorite={isPrincipleFavorite}
           onToggleFavorite={toggleFavorite}
+          onShareUnavailable={() => Taro.showToast({
+            title: '请在微信小程序中使用分享',
+            icon: 'none',
+          })}
           reviewDueAt={reviewDueAt}
         />
       )}

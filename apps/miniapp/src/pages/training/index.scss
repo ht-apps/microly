@@ -614,6 +614,21 @@
   line-height: 78px;
 }
 
+.completion-share-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 78px;
+  margin-top: 16px;
+  color: #5b5bd6;
+  background: #fff;
+  border: 2px solid #d9d8fa;
+  border-radius: 20px;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 78px;
+}
+
 .training-review-actions {
   display: flex;
   gap: 14px;

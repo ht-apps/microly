@@ -13,6 +13,15 @@ export default defineConfig<'vite'>({
   },
   sourceRoot: 'src',
   outputRoot: 'dist',
+  copy: {
+    patterns: [
+      {
+        from: 'src/assets/share/challenge-cover.png',
+        to: 'dist/assets/share/challenge-cover.png'
+      }
+    ],
+    options: {}
+  },
   plugins: ['@tarojs/plugin-generator'],
   framework: 'react',
   compiler: 'vite',

@@ -7,6 +7,7 @@ export default defineAppConfig({
     'pages/review/index',
     'pages/favorites/index',
     'pages/preferences/index',
+    'pages/challenge/index',
     'pages/training/index'
   ],
   tabBar: {

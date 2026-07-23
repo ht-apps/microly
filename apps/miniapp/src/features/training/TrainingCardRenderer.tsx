@@ -20,6 +20,7 @@ interface TrainingCardRendererProps {
   onStartReview: () => void
   isPrincipleFavorite: boolean
   onToggleFavorite: () => void
+  onShareUnavailable: () => void
   reviewDueAt?: string | null
 }
 
@@ -260,6 +261,7 @@ export default function TrainingCardRenderer({
   onStartReview,
   isPrincipleFavorite,
   onToggleFavorite,
+  onShareUnavailable,
   reviewDueAt,
 }: TrainingCardRendererProps) {
   const card = session.cards[progress.currentCardIndex]
@@ -521,6 +523,21 @@ export default function TrainingCardRenderer({
           >
             回看本次训练
           </Button>
+          {process.env.TARO_ENV === 'weapp' ? (
+            <Button
+              className='microly-button completion-share-button'
+              openType='share'
+            >
+              分享情景挑战
+            </Button>
+          ) : (
+            <Button
+              className='microly-button completion-share-button'
+              onClick={onShareUnavailable}
+            >
+              分享情景挑战
+            </Button>
+          )}
           <Button className='microly-button training-primary-button' onClick={onBackHome}>
             回到今日
           </Button>

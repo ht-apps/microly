@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="750" height="600" viewBox="0 0 750 600">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffaf2"/>
+      <stop offset="1" stop-color="#efeeff"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6964e8"/>
+      <stop offset="1" stop-color="#5652c9"/>
+    </linearGradient>
+  </defs>
+  <rect width="750" height="600" fill="url(#background)"/>
+  <circle cx="690" cy="38" r="165" fill="#c8c3ff" opacity="0.32"/>
+  <circle cx="65" cy="575" r="150" fill="#ffe0ac" opacity="0.28"/>
+  <rect x="68" y="60" width="614" height="480" rx="44" fill="#ffffff" opacity="0.96"/>
+  <rect x="112" y="104" width="182" height="48" rx="24" fill="#efeeff"/>
+  <text x="203" y="136" fill="#5b5bd6" font-family="PingFang SC, sans-serif" font-size="23" font-weight="700" text-anchor="middle">一句话情景挑战</text>
+  <text x="112" y="231" fill="#17213b" font-family="PingFang SC, sans-serif" font-size="48" font-weight="700">如果是你，</text>
+  <text x="112" y="296" fill="#17213b" font-family="PingFang SC, sans-serif" font-size="48" font-weight="700">会怎么回应？</text>
+  <text x="112" y="352" fill="#686d7d" font-family="PingFang SC, sans-serif" font-size="25">一个真实职场情景，三个表达选择</text>
+  <g transform="translate(112 391)">
+    <rect width="54" height="54" rx="27" fill="url(#accent)"/>
+    <text x="27" y="37" fill="#ffffff" font-family="Arial, sans-serif" font-size="28" font-weight="700" text-anchor="middle">M</text>
+    <text x="72" y="25" fill="#343a4e" font-family="PingFang SC, sans-serif" font-size="25" font-weight="700">微习 Microly</text>
+    <text x="72" y="53" fill="#858997" font-family="PingFang SC, sans-serif" font-size="19">每天 3 分钟，把知道变成会用</text>
+  </g>
+  <rect x="112" y="477" width="526" height="4" rx="2" fill="#dedcf8"/>
+</svg>

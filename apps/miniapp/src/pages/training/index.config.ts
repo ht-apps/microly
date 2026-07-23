@@ -1,3 +1,4 @@
 export default definePageConfig({
-  navigationBarTitleText: '技能训练'
+  navigationBarTitleText: '技能训练',
+  enableShareAppMessage: true
 })
