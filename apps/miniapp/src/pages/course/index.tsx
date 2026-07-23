@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
+import { trackEvent } from '../../features/analytics/analytics-client'
+import { subscribeToContentUpdates } from '../../features/content/content-client'
 import { readPreferenceSnapshot } from '../../features/preference/preference-snapshot'
 import { formatReviewDate } from '../../features/review/review-state'
 import { readReviewSnapshot } from '../../features/review/review-snapshot'
@@ -11,7 +13,7 @@ import {
   type CourseChapterStatus,
   type CourseItem,
   type CourseItemStatus,
-} from '../../features/training/training-scheduler'
+} from '../../features/training/course-overview'
 import { transitionTraining } from '../../features/training/training-state'
 import {
   clearTrainingProgress,
@@ -54,13 +56,16 @@ function readCourseSnapshot() {
 }
 
 function trainingUrl(sessionId: string) {
-  return `/pages/training/index?sessionId=${sessionId}`
+  return `/pages/training/index?sessionId=${sessionId}&entry=course`
 }
 
 export default function CoursePage() {
   const [snapshot, setSnapshot] = useState(readCourseSnapshot)
 
   useDidShow(() => setSnapshot(readCourseSnapshot()))
+  useEffect(() => subscribeToContentUpdates(() => {
+    setSnapshot(readCourseSnapshot())
+  }), [])
 
   const openItem = async (item: CourseItem) => {
     if (!item.session || !item.progress) return
@@ -71,6 +76,13 @@ export default function CoursePage() {
       item.session,
       { type: 'START' },
     )
+    if (item.progress.status === 'not_started') {
+      trackEvent('training_start', {
+        sessionId: item.session.sessionId,
+        contentVersion: item.session.contentVersion,
+        entry: 'course',
+      })
+    }
     writeTrainingProgress(nextProgress)
     await Taro.navigateTo({ url: trainingUrl(item.sessionId) })
   }

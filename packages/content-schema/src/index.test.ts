@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest'
 
 import {
   TrainingCatalogSchema,
+  TrainingContentBundleSchema,
   TrainingLibrarySchema,
   TrainingSessionSchema,
 } from './index'
+import { z } from 'zod'
+
+describe('Zod runtime configuration', () => {
+  it('使用兼容微信小程序沙箱的无 JIT 校验', () => {
+    expect(z.config().jitless).toBe(true)
+  })
+})
 
 const validSession = {
   schemaVersion: '1.0',
@@ -139,6 +147,24 @@ describe('TrainingSessionSchema', () => {
     session.cards[4].minLength = 201
 
     expect(TrainingSessionSchema.safeParse(session).success).toBe(false)
+  })
+})
+
+describe('TrainingContentBundleSchema', () => {
+  it('拒绝缺失章节或训练的发布包', () => {
+    expect(TrainingContentBundleSchema.safeParse({
+      releaseVersion: 1,
+      library: {
+        schemaVersion: '1.0',
+        libraryId: 'test-library',
+        contentVersion: 1,
+        title: '测试课程',
+        description: '用于验证完整课程发布包的测试数据。',
+        catalogIds: ['missing-catalog'],
+      },
+      catalogs: {},
+      sessions: {},
+    }).success).toBe(false)
   })
 })
 

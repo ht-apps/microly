@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+// WeChat Mini Program does not reliably support Zod 4's dynamically generated
+// object parsers. Keep all shared schemas on the CSP-safe interpreter path.
+z.config({ jitless: true })
+
 const IdentifierSchema = z.string().regex(/^[a-z0-9-]+$/)
 
 export const TrainingOptionRatingSchema = z.enum([
@@ -192,6 +196,42 @@ export const TrainingLibrarySchema = z.object({
   }
 })
 
+export const TrainingContentBundleSchema = z.object({
+  releaseVersion: z.number().int().positive(),
+  library: TrainingLibrarySchema,
+  catalogs: z.record(IdentifierSchema, TrainingCatalogSchema),
+  sessions: z.record(IdentifierSchema, TrainingSessionSchema),
+}).superRefine((bundle, context) => {
+  bundle.library.catalogIds.forEach((catalogId) => {
+    const catalog = bundle.catalogs[catalogId]
+    if (!catalog || catalog.catalogId !== catalogId) {
+      context.addIssue({
+        code: 'custom',
+        message: '课程库引用的章节不存在或 ID 不一致',
+        path: ['catalogs', catalogId],
+      })
+      return
+    }
+
+    catalog.sessionIds.forEach((sessionId) => {
+      const session = bundle.sessions[sessionId]
+      if (!session || session.sessionId !== sessionId) {
+        context.addIssue({
+          code: 'custom',
+          message: '章节引用的训练不存在或 ID 不一致',
+          path: ['sessions', sessionId],
+        })
+      } else if (session.skill !== catalog.skill) {
+        context.addIssue({
+          code: 'custom',
+          message: '训练技能与所属章节不一致',
+          path: ['sessions', sessionId, 'skill'],
+        })
+      }
+    })
+  })
+})
+
 export type TrainingOptionRating = z.infer<typeof TrainingOptionRatingSchema>
 export type TrainingOption = z.infer<typeof TrainingOptionSchema>
 export type ScenarioCard = z.infer<typeof ScenarioCardSchema>
@@ -205,3 +245,4 @@ export type TrainingCard = z.infer<typeof TrainingCardSchema>
 export type TrainingSession = z.infer<typeof TrainingSessionSchema>
 export type TrainingCatalog = z.infer<typeof TrainingCatalogSchema>
 export type TrainingLibrary = z.infer<typeof TrainingLibrarySchema>
+export type TrainingContentBundle = z.infer<typeof TrainingContentBundleSchema>

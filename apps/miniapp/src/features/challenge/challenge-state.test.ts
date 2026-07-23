@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { getTrainingSession, trainingContent } from '../../data/training-content'
-import { createCourseOverview } from '../training/training-scheduler'
+import { createCourseOverview } from '../training/course-overview'
 import { createInitialProgress } from '../training/training-state'
 import {
   createChallengeState,

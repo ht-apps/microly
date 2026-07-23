@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
+import { trackEvent } from '../../features/analytics/analytics-client'
+import { subscribeToContentUpdates } from '../../features/content/content-client'
 import { createLearningActivitySummary } from '../../features/activity/activity-state'
 import { syncLearningActivity } from '../../features/activity/activity-storage'
 import { readPreferenceSnapshot } from '../../features/preference/preference-snapshot'
 import { formatReviewDate } from '../../features/review/review-state'
 import { readReviewSnapshot } from '../../features/review/review-snapshot'
-import { createCourseOverview } from '../../features/training/training-scheduler'
+import { createCourseOverview } from '../../features/training/course-overview'
 import {
   transitionTraining,
   type TrainingProgress,
@@ -49,6 +51,10 @@ export default function Index() {
     setSnapshot(readHomeSnapshot())
   })
 
+  useEffect(() => subscribeToContentUpdates(() => {
+    setSnapshot(readHomeSnapshot())
+  }), [])
+
   const openCourse = () => Taro.switchTab({ url: '/pages/course/index' })
   const openReviews = () => Taro.navigateTo({ url: '/pages/review/index' })
 
@@ -63,10 +69,17 @@ export default function Index() {
       item.session,
       { type: 'START' },
     )
+    if (item.progress.status === 'not_started') {
+      trackEvent('training_start', {
+        sessionId: item.session.sessionId,
+        contentVersion: item.session.contentVersion,
+        entry: 'today',
+      })
+    }
     writeTrainingProgress(nextProgress)
     setSnapshot(readHomeSnapshot())
     await Taro.navigateTo({
-      url: `/pages/training/index?sessionId=${item.session.sessionId}`,
+      url: `/pages/training/index?sessionId=${item.session.sessionId}&entry=today`,
     })
   }
 

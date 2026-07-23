@@ -13,8 +13,8 @@
     "new": "taro new",
     "build:weapp": "taro build --type weapp",
     "build:h5": "taro build --type h5",
-    "dev:weapp": "pnpm run build:weapp -- --watch",
-    "dev:h5": "pnpm run build:h5 -- --watch",
+    "dev:weapp": "taro build --type weapp --watch",
+    "dev:h5": "taro build --type h5 --watch",
     "test": "vitest run",
     "typecheck": "node scripts/typecheck.mjs",
     "lint:styles": "stylelint 'src/**/*.scss'"
@@ -26,6 +26,8 @@
   "dependencies": {
     "@babel/runtime": "^7.29.7",
     "@microly/content-schema": "workspace:*",
+    "@microly/api-contract": "workspace:*",
+    "@microly/training-content": "workspace:*",
     "@tarojs/components": "4.2.1",
     "@tarojs/helper": "4.2.1",
     "@tarojs/plugin-framework-react": "4.2.1",

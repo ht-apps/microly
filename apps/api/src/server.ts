@@ -1,39 +1,23 @@
-import Fastify from 'fastify'
+import { createApp } from './app.js'
+import { readConfig } from './config.js'
 
-const app = Fastify({
-  logger: true,
-})
-
-app.get('/', async () => ({
-  message: 'Hello World',
-}))
-
+const config = readConfig()
+const app = createApp({ databaseUrl: config.databaseUrl, logger: true })
 let isClosing = false
 
 async function close(signal: NodeJS.Signals) {
-  if (isClosing) {
-    return
-  }
-
+  if (isClosing) return
   isClosing = true
   app.log.info({ signal }, 'Shutting down API server')
   await app.close()
 }
 
-process.once('SIGINT', () => {
-  void close('SIGINT')
-})
-
-process.once('SIGTERM', () => {
-  void close('SIGTERM')
-})
+process.once('SIGINT', () => void close('SIGINT'))
+process.once('SIGTERM', () => void close('SIGTERM'))
 
 try {
-  await app.listen({
-    host: '0.0.0.0',
-    port: 3000,
-  })
-} catch (error) {
-  app.log.error(error)
+  await app.listen({ host: '0.0.0.0', port: config.port })
+} catch (cause) {
+  app.log.error(cause)
   process.exitCode = 1
 }

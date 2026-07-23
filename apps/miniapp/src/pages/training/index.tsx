@@ -8,6 +8,7 @@ import {
   getTrainingSession,
   trainingContent,
 } from '../../data/training-content'
+import { flushAnalyticsOutbox, trackEvent } from '../../features/analytics/analytics-client'
 import { createTrainingCompletedEvent } from '../../features/activity/activity-state'
 import { recordLearningActivity } from '../../features/activity/activity-storage'
 import {
@@ -23,6 +24,10 @@ import {
   readReviewQueue,
   upsertCompletedTrainingReview,
 } from '../../features/review/review-storage'
+import {
+  enqueueTrainingCompletion,
+  flushCompletionOutbox,
+} from '../../features/sync/completion-sync'
 import TrainingCardRenderer, {
   CompletedTrainingReview,
 } from '../../features/training/TrainingCardRenderer'
@@ -126,6 +131,24 @@ export default function TrainingPage() {
         return current
       }
 
+      if (action.type === 'CONFIRM_CHOICE' && current.selectedOptionId) {
+        const choice = session.cards.find((card) => card.type === 'choice')
+        const displayPosition = choice?.options.findIndex(
+          (option) => option.id === current.selectedOptionId,
+        ) ?? -1
+        const option = choice?.options[displayPosition]
+        if (option && displayPosition >= 0) {
+          trackEvent('option_select', {
+            sessionId: session.sessionId,
+            contentVersion: session.contentVersion,
+            optionId: option.id,
+            displayPosition,
+            rating: option.rating,
+          })
+          void flushAnalyticsOutbox()
+        }
+      }
+
       const nextProgress = transitionTraining(
         current,
         session,
@@ -139,6 +162,19 @@ export default function TrainingPage() {
         && current.status !== 'completed'
         && nextProgress.status === 'completed'
       ) {
+        const startedAt = nextProgress.startedAt
+        const completedAt = nextProgress.completedAt
+        trackEvent('training_complete', {
+          sessionId: session.sessionId,
+          contentVersion: session.contentVersion,
+          durationMs: startedAt && completedAt
+            ? Math.max(0, Date.parse(completedAt) - Date.parse(startedAt))
+            : 0,
+          practiceUsed: Boolean(nextProgress.practiceEvaluation),
+        })
+        enqueueTrainingCompletion(nextProgress)
+        void flushCompletionOutbox()
+        void flushAnalyticsOutbox()
         if (nextProgress.completedAt) {
           const activity = recordLearningActivity(
             trainingContent.sessions,

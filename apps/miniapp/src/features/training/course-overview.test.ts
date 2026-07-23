@@ -6,7 +6,7 @@ import {
   transitionTraining,
   type TrainingProgress,
 } from './training-state'
-import { createCourseOverview } from './training-scheduler'
+import { createCourseOverview } from './course-overview'
 
 const timestamp = '2026-07-22T12:00:00.000Z'
 
@@ -31,7 +31,7 @@ function markCompleted(progress: TrainingProgress): TrainingProgress {
   }
 }
 
-describe('training scheduler', () => {
+describe('course overview', () => {
   it('首次只解锁第一组训练和第一章', () => {
     const overview = createCourseOverview(
       trainingContent.chapters,

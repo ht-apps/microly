@@ -6,6 +6,7 @@ import {
   getFirstAvailableTraining,
   trainingContent,
 } from '../../data/training-content'
+import { trackEvent } from '../../features/analytics/analytics-client'
 import { readLearningActivity } from '../../features/activity/activity-storage'
 import { toggleCatalogPreference } from '../../features/preference/preference-state'
 import {
@@ -35,6 +36,7 @@ export default function OnboardingPage() {
   const [recoveredFromInvalid, setRecoveredFromInvalid] = useState(false)
 
   useEffect(() => {
+    trackEvent('onboarding_view', { isFirstVisit: true })
     const training = readAllTrainingProgress(trainingContent.sessions)
     const activity = readLearningActivity(trainingContent.sessions)
     const hasExistingLearningData = Object.values(
@@ -71,6 +73,10 @@ export default function OnboardingPage() {
   }
 
   const startFirstTraining = async (preferenceIds: string[]) => {
+    trackEvent('preference_submit', {
+      selectedSkills: preferenceIds,
+      skipped: preferenceIds.length === 0,
+    })
     const saved = saveUserPreference(preferenceIds)
     if (saved.writeFailed) {
       Taro.showToast({
@@ -85,6 +91,13 @@ export default function OnboardingPage() {
       return
     }
     const stored = readTrainingProgress(session)
+    if (stored.progress.status === 'not_started') {
+      trackEvent('training_start', {
+        sessionId: session.sessionId,
+        contentVersion: session.contentVersion,
+        entry: 'onboarding',
+      })
+    }
     const started = transitionTraining(
       stored.progress,
       session,
@@ -94,7 +107,7 @@ export default function OnboardingPage() {
       Taro.showToast({ title: '进度暂未保存，请保持页面开启', icon: 'none' })
     }
     await Taro.redirectTo({
-      url: `/pages/training/index?sessionId=${session.sessionId}`,
+      url: `/pages/training/index?sessionId=${session.sessionId}&entry=onboarding`,
     })
   }
 
@@ -139,7 +152,7 @@ export default function OnboardingPage() {
         >
           开始了解
         </Button>
-        <Text className='onboarding-footnote'>无需登录，学习记录只保存在本机</Text>
+        <Text className='onboarding-footnote'>无需登录，联网时会安全同步训练完成记录</Text>
       </View>
     )
   }

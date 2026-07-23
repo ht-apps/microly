@@ -4,7 +4,7 @@ import { syncLearningActivity } from '../activity/activity-storage'
 import { syncFavoriteQueue } from '../favorite/favorite-storage'
 import { readPreferenceSnapshot } from '../preference/preference-snapshot'
 import { readReviewSnapshot } from '../review/review-snapshot'
-import { createCourseOverview } from '../training/training-scheduler'
+import { createCourseOverview } from '../training/course-overview'
 import { readAllTrainingProgress } from '../training/training-storage'
 import { createProfileSummary } from './profile-summary'
 

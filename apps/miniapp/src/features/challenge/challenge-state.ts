@@ -5,7 +5,7 @@ import type {
   TrainingSession,
 } from '@microly/content-schema'
 
-import type { CourseOverview } from '../training/training-scheduler'
+import type { CourseOverview } from '../training/course-overview'
 
 export interface ChallengeState {
   selectedOptionId: string | null

@@ -14,10 +14,12 @@ apps/
 ├── api/       # Fastify + TypeScript API
 └── admin/     # Vite + React + TypeScript 运营后台
 packages/
-└── content-schema/ # 基于 Zod 的训练内容共享契约
+├── content-schema/  # 基于 Zod 的训练内容共享契约
+├── training-content/ # 小程序与 API 共用的内置课程
+└── api-contract/    # 联网接口请求与响应契约
 ```
 
-小程序已包含首次引导与本地学习偏好，以及“职场沟通基础”本地课程。课程按顺序提供边界沟通、清晰汇报、表达异议和推动协作四个章节，共 10 组完整训练；同时支持自然日今日任务、本周进度、连续学习、跨章节课程进度、单组重练、本地错题复习和原则收藏。训练第 2～5 步可保留状态返回，完成后可只读回看本次训练，并可将不含个人答案的情景挑战分享给微信好友。“今日、课程、我的”通过原生 TabBar 组成主导航。API 和运营后台仍为 Hello World 工程。API 已安装 Zod、Drizzle ORM 和 PostgreSQL 驱动，但尚未配置数据库连接、Schema 或迁移。
+小程序已包含首次引导、课程进度、间隔复习、原则收藏、学习统计、情景分享与四章 10 组训练。v0.2 增加 PostgreSQL + Fastify 联网纵切：远程内容与离线兜底、匿名游客身份、训练完成记录幂等同步和核心漏斗埋点。收藏、复习、偏好和主动表达仍只保存在本机。运营后台仍为 Hello World 工程。
 
 ## 环境要求
 
@@ -51,21 +53,35 @@ pnpm dev:miniapp
 
 ```dotenv
 TARO_APP_ID=wx你的测试号AppID
+TARO_APP_API_BASE_URL=http://127.0.0.1:3000
 ```
 
 修改后需要重新启动 `pnpm dev:miniapp`。`TARO_APP_ID` 会覆盖构建产物 `apps/miniapp/dist/project.config.json`，但不会改写受版本控制的外层 `project.config.json`；不要在前端环境文件中保存 AppSecret。
 
 ### 后端 API
 
+首次启动时准备 PostgreSQL 和课程内容：
+
+```bash
+pnpm db:up
+pnpm db:migrate
+pnpm db:seed
+```
+
+启动 API：
+
 ```bash
 pnpm dev:api
 ```
 
-访问 `http://localhost:3000/`，返回：
+访问 `http://localhost:3000/health`，正常时返回：
 
 ```json
 {
-  "message": "Hello World"
+  "data": {
+    "process": "ok",
+    "database": "ok"
+  }
 }
 ```
 
@@ -94,7 +110,14 @@ pnpm test
 pnpm typecheck
 ```
 
-课程库、章节目录和每组内容由 `@microly/content-schema` 在运行时分层校验；单章节或单组无效不会阻塞后续有效训练。训练按四章节全课程顺序解锁，学习偏好只标记重点章节，不跳过前置。已有本地训练记录的用户会自动跳过首次引导。学习偏好、训练进度、主动表达、原则收藏、学习活动和 1/3/7/14 天复习队列均保存在当前设备，不会上传到服务端。完成一组正式训练，或同一天完成至少两道到期复习，会形成一个有效学习日；本周按周一至周日统计。“我的”页面只展示能够从这些本地状态可靠计算的基础统计。
+API 集成测试使用独立的 `microly_test` 数据库：
+
+```bash
+pnpm db:test:up
+pnpm test:integration:api
+```
+
+课程库、章节目录和每组内容由 `@microly/content-schema` 校验。远程内容不可用时依次回退到最近的已验证缓存和内置课程。训练完成记录会在配置 API 后幂等同步，原有本地记录会自动补建待同步项。学习偏好、主动表达、原则收藏、学习活动和复习队列仍保存在当前设备。
 
 训练完成页支持微信原生好友分享。分享路径只包含训练组 ID 和固定来源标记，不携带分享者答案、主动表达、正确率或本地学习数据；接收方在独立挑战页作答，结果也不会写入训练与学习记录。H5 仅用于预览挑战页，实际分享需在微信小程序中使用。
 

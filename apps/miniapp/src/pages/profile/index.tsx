@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
+import { subscribeToContentUpdates } from '../../features/content/content-client'
 import { formatReviewDate } from '../../features/review/review-state'
 import { readProfileSnapshot } from '../../features/profile/profile-snapshot'
 
@@ -12,6 +13,9 @@ export default function ProfilePage() {
   const [snapshot, setSnapshot] = useState(readProfileSnapshot)
 
   useDidShow(() => setSnapshot(readProfileSnapshot()))
+  useEffect(() => subscribeToContentUpdates(() => {
+    setSnapshot(readProfileSnapshot())
+  }), [])
 
   const { summary } = snapshot
   const openCourse = () => Taro.switchTab({ url: '/pages/course/index' })
@@ -25,7 +29,7 @@ export default function ProfilePage() {
         <Text className='profile-hero__eyebrow'>我的学习</Text>
         <Text className='profile-hero__title'>本机学习记录</Text>
         <Text className='profile-hero__body'>
-          当前数据只保存在这台设备，不会上传到服务端。
+          训练完成记录会在联网时安全同步，收藏和复习仍保存在本机。
         </Text>
       </View>
 

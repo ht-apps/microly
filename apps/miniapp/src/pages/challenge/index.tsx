@@ -18,7 +18,7 @@ import {
   CHALLENGE_SHARE_IMAGE_URL,
   createChallengeSharePayload,
 } from '../../features/challenge/challenge-share'
-import { createCourseOverview } from '../../features/training/training-scheduler'
+import { createCourseOverview } from '../../features/training/course-overview'
 import { transitionTraining } from '../../features/training/training-state'
 import {
   readAllTrainingProgress,
