@@ -148,38 +148,6 @@ export function upsertReviewFromTraining(
   return { items: nextItems, item: resetItem, changed: true }
 }
 
-export function backfillReviewsFromProgress(
-  items: ReviewItem[],
-  sessions: TrainingSession[],
-  progressBySessionId: Record<string, TrainingProgress>,
-): ReviewMutation {
-  let nextItems = items
-  let changed = false
-  let lastItem: ReviewItem | null = null
-
-  sessions.forEach((session) => {
-    if (nextItems.some((item) => item.reviewId === createReviewId(session.sessionId))) {
-      return
-    }
-
-    const progress = progressBySessionId[session.sessionId]
-    if (!progress?.completedAt) return
-    const mutation = upsertReviewFromTraining(
-      nextItems,
-      session,
-      progress,
-      progress.completedAt,
-    )
-    if (mutation.changed) {
-      nextItems = mutation.items
-      lastItem = mutation.item
-      changed = true
-    }
-  })
-
-  return { items: nextItems, item: lastItem, changed }
-}
-
 function nextCorrectInterval(consecutiveCorrect: number): ReviewIntervalDays {
   if (consecutiveCorrect <= 1) return 3
   if (consecutiveCorrect === 2) return 7

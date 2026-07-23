@@ -5,10 +5,10 @@ import {
   refreshTrainingContent,
 } from '../content/content-client'
 import {
-  backfillCompletionOutbox,
   flushCompletionOutbox,
   restoreServerCompletions,
 } from '../sync/completion-sync'
+import { flushFullSync } from '../sync/state-sync'
 
 export function initializeLocalNetworkState() {
   initializeTrainingContentFromCache()
@@ -17,8 +17,8 @@ export function initializeLocalNetworkState() {
 export async function bootstrapNetworkFeatures() {
   trackEvent('app_open', { source: 'direct' })
   await refreshTrainingContent()
-  backfillCompletionOutbox(trainingContent.sessions)
   await flushCompletionOutbox()
   await restoreServerCompletions(trainingContent.sessions)
+  await flushFullSync()
   await flushAnalyticsOutbox()
 }

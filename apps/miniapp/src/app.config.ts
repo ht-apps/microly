@@ -8,7 +8,11 @@ export default defineAppConfig({
     'pages/favorites/index',
     'pages/preferences/index',
     'pages/challenge/index',
-    'pages/training/index'
+    'pages/training/index',
+    'pages/settings/index',
+    'pages/privacy/index',
+    'pages/agreement/index',
+    'pages/feedback/index'
   ],
   tabBar: {
     color: '#7e8290',

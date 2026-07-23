@@ -13,6 +13,7 @@ export type TrainingStatus = 'not_started' | 'in_progress' | 'completed'
 export interface TrainingProgress {
   sessionId: string
   contentVersion: number
+  attemptId: string
   status: TrainingStatus
   currentCardIndex: number
   selectedOptionId: string | null
@@ -45,9 +46,11 @@ export function createInitialProgress(
   session: TrainingSession,
   now?: string,
 ): TrainingProgress {
+  const timestamp = nowIso(now)
   return {
     sessionId: session.sessionId,
     contentVersion: session.contentVersion,
+    attemptId: `attempt:${session.sessionId}:${timestamp}`,
     status: 'not_started',
     currentCardIndex: 0,
     selectedOptionId: null,
@@ -56,7 +59,7 @@ export function createInitialProgress(
     practiceText: '',
     practiceEvaluation: null,
     startedAt: null,
-    updatedAt: nowIso(now),
+    updatedAt: timestamp,
     completedAt: null,
   }
 }
@@ -274,6 +277,8 @@ export function parseTrainingProgress(
   const isValid =
     value.sessionId === session.sessionId
     && value.contentVersion === session.contentVersion
+    && typeof value.attemptId === 'string'
+    && value.attemptId.length > 0
     && statusIsValid
     && currentCardIndexIsValid
     && selectedOptionIsValid
@@ -339,21 +344,8 @@ export function parseTrainingProgress(
     }
   }
 
-  const parsedProgress = value as unknown as TrainingProgress
-
-  // 兼容旧版“已确认但仍停留在选择卡”的中间状态。
-  if (parsedProgress.currentCardIndex === 1 && parsedProgress.choiceConfirmed) {
-    return {
-      progress: {
-        ...parsedProgress,
-        currentCardIndex: 2,
-      },
-      recoveredFromInvalid: false,
-    }
-  }
-
   return {
-    progress: parsedProgress,
+    progress: value as unknown as TrainingProgress,
     recoveredFromInvalid: false,
   }
 }

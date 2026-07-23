@@ -176,22 +176,6 @@ describe('parseTrainingProgress', () => {
     expect(parsed.progress.currentCardIndex).toBe(1)
   })
 
-  it('将旧版已确认的选择卡进度迁移到反馈页', () => {
-    let progress = reachChoice()
-    progress = transitionTraining(progress, session, {
-      type: 'SELECT_OPTION',
-      optionId: 'constructive-boundary',
-    }, timestamp)
-
-    const parsed = parseTrainingProgress({
-      ...progress,
-      choiceConfirmed: true,
-    }, session)
-
-    expect(parsed.recoveredFromInvalid).toBe(false)
-    expect(parsed.progress.currentCardIndex).toBe(2)
-  })
-
   it('损坏数据和旧内容版本会安全重置', () => {
     const corrupted = parseTrainingProgress({ status: 'in_progress' }, session)
     const oldVersion = parseTrainingProgress({

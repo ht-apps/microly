@@ -1,0 +1,113 @@
+.settings-page {
+  min-height: 100vh;
+  padding: 32px 30px 72px;
+  box-sizing: border-box;
+  background: #fffaf2;
+}
+
+.settings-card,
+.settings-links {
+  padding: 28px;
+  background: #fff;
+  border: 1px solid rgba(91, 91, 214, 0.1);
+  border-radius: 26px;
+}
+
+.settings-title,
+.settings-body {
+  display: block;
+}
+
+.settings-title {
+  color: #202a43;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.settings-body {
+  margin-top: 12px;
+  color: #737787;
+  font-size: 22px;
+  line-height: 1.6;
+}
+
+.settings-primary,
+.settings-secondary,
+.settings-plain,
+.settings-danger {
+  width: 100%;
+  margin-top: 22px;
+  padding: 0 24px;
+  border-radius: 999px;
+  font-size: 24px;
+  line-height: 72px;
+}
+
+.settings-primary {
+  color: #fff;
+  background: #5b5bd6;
+}
+
+.settings-secondary {
+  color: #5b5bd6;
+  background: #eeedff;
+}
+
+.settings-links {
+  margin-top: 22px;
+  padding: 0 24px;
+}
+
+.settings-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 96px;
+  margin: 0;
+  padding: 24px 0;
+  color: #293148;
+  background: transparent;
+  border-bottom: 1px solid #eeeae4;
+  border-radius: 0;
+  text-align: left;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.settings-link:last-child {
+  border-bottom: 0;
+}
+
+.settings-link__arrow {
+  color: #a1a3ad;
+  font-size: 32px;
+  font-weight: 400;
+}
+
+.settings-account-actions {
+  margin-top: 26px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(91, 91, 214, 0.08);
+  border-radius: 24px;
+}
+
+.settings-plain {
+  margin-top: 0;
+  color: #555;
+  background: transparent;
+  border-radius: 0;
+}
+
+.settings-danger {
+  margin-top: 0;
+  color: #b33d3d;
+  background: transparent;
+  border-radius: 0;
+}
+
+.settings-plain + .settings-danger {
+  border-top: 1px solid #eeeae4;
+}

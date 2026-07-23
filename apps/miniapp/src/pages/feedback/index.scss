@@ -1,0 +1,50 @@
+.feedback-page {
+  min-height: 100vh;
+  padding: 34px 30px 72px;
+  box-sizing: border-box;
+  background: #fffaf2;
+}
+
+.feedback-label {
+  display: block;
+  margin: 22px 0 12px;
+  color: #293148;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.feedback-picker,
+.feedback-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #e8e3dc;
+  border-radius: 20px;
+  color: #293148;
+  font-size: 23px;
+}
+
+.feedback-textarea {
+  height: 300px;
+  line-height: 1.6;
+}
+
+.feedback-count {
+  display: block;
+  margin-top: 8px;
+  color: #9093a0;
+  font-size: 19px;
+  text-align: right;
+}
+
+.feedback-submit {
+  width: 100%;
+  margin-top: 30px;
+  padding: 0 24px;
+  color: #fff;
+  background: #5b5bd6;
+  border-radius: 999px;
+  font-size: 25px;
+  line-height: 76px;
+}

@@ -6,6 +6,7 @@ import {
   type ParsedTrainingProgress,
   type TrainingProgress,
 } from './training-state'
+import { markFullSyncPending } from '../sync/sync-pending'
 
 export function getTrainingStorageKey(
   session: Pick<TrainingSession, 'sessionId' | 'contentVersion'>,
@@ -13,14 +14,28 @@ export function getTrainingStorageKey(
   return `microly:training:${session.sessionId}:v${session.contentVersion}`
 }
 
+export function getPrivateDraftStorageKey(
+  session: Pick<TrainingSession, 'sessionId' | 'contentVersion'>,
+) {
+  return `microly:training-private:${session.sessionId}:v${session.contentVersion}`
+}
+
 export function readTrainingProgress(
   session: TrainingSession,
 ): ParsedTrainingProgress {
   try {
-    const storedValue = Taro.getStorageSync<unknown>(
+    const storedValue = Taro.getStorageSync<Record<string, unknown>>(
       getTrainingStorageKey(session),
     )
-    return parseTrainingProgress(storedValue, session)
+    const privateDraft = Taro.getStorageSync<Record<string, unknown>>(
+      getPrivateDraftStorageKey(session),
+    )
+    return parseTrainingProgress(
+      storedValue && typeof storedValue === 'object'
+        ? { ...storedValue, ...(privateDraft && typeof privateDraft === 'object' ? privateDraft : {}) }
+        : storedValue,
+      session,
+    )
   } catch {
     return {
       ...parseTrainingProgress(undefined, session),
@@ -31,7 +46,19 @@ export function readTrainingProgress(
 
 export function writeTrainingProgress(progress: TrainingProgress) {
   try {
-    Taro.setStorageSync(getTrainingStorageKey(progress), progress)
+    const { practiceText, practiceEvaluation, otherFeedbackExpanded, ...safeProgress } = progress
+    Taro.setStorageSync(getTrainingStorageKey(progress), {
+      ...safeProgress,
+      practiceText: '',
+      practiceEvaluation: progress.status === 'completed' ? [] : null,
+      otherFeedbackExpanded: false,
+    })
+    Taro.setStorageSync(getPrivateDraftStorageKey(progress), {
+      practiceText,
+      practiceEvaluation,
+      otherFeedbackExpanded,
+    })
+    markFullSyncPending()
     return true
   } catch {
     return false
@@ -43,6 +70,8 @@ export function clearTrainingProgress(
 ) {
   try {
     Taro.removeStorageSync(getTrainingStorageKey(session))
+    Taro.removeStorageSync(getPrivateDraftStorageKey(session))
+    markFullSyncPending()
     return true
   } catch {
     return false

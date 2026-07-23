@@ -44,6 +44,83 @@
   font-size: 22px;
 }
 
+.profile-login-card {
+  margin-top: 28px;
+  padding: 28px;
+  color: #fff;
+  background: linear-gradient(135deg, #5656d8 0%, #7670ed 100%);
+  border-radius: 28px;
+  box-shadow: 0 20px 44px rgba(74, 67, 190, 0.24);
+}
+
+.profile-login-card__heading {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.profile-login-card__badge {
+  display: flex;
+  flex: 0 0 70px;
+  align-items: center;
+  justify-content: center;
+  width: 70px;
+  height: 70px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 22px;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.profile-login-card__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-login-card__title,
+.profile-login-card__body,
+.profile-login-card__privacy {
+  display: block;
+}
+
+.profile-login-card__title {
+  font-size: 29px;
+  font-weight: 700;
+}
+
+.profile-login-card__body {
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.84);
+  font-size: 21px;
+  line-height: 1.5;
+}
+
+.profile-login-card__button {
+  width: 100%;
+  height: 76px;
+  margin-top: 24px;
+  color: #5555ce;
+  background: #fff;
+  border-radius: 999px;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 76px;
+}
+
+.profile-login-card__button[disabled] {
+  color: rgba(85, 85, 206, 0.66);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.profile-login-card__privacy {
+  margin-top: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 18px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .profile-progress-card {
   margin-top: 32px;
   padding: 30px;

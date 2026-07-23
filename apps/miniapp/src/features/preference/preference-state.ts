@@ -17,7 +17,7 @@ export interface ParsedUserPreference {
 
 export type OnboardingDecision =
   | { action: 'show_onboarding'; preference: null }
-  | { action: 'open_today'; preference: UserPreference; migratedLegacy: boolean }
+  | { action: 'open_today'; preference: UserPreference }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -108,21 +108,11 @@ export function toggleCatalogPreference(
 
 export function resolveOnboardingDecision(
   parsed: ParsedUserPreference,
-  hasExistingLearningData: boolean,
-  now = new Date().toISOString(),
 ): OnboardingDecision {
   if (parsed.preference) {
     return {
       action: 'open_today',
       preference: parsed.preference,
-      migratedLegacy: false,
-    }
-  }
-  if (hasExistingLearningData) {
-    return {
-      action: 'open_today',
-      preference: createCompletedPreference([], now),
-      migratedLegacy: true,
     }
   }
   return { action: 'show_onboarding', preference: null }

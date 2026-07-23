@@ -73,12 +73,6 @@ export function enqueueTrainingCompletion(progress: TrainingProgress) {
   return writeOutbox([...current, completion])
 }
 
-export function backfillCompletionOutbox(sessions: TrainingSession[]) {
-  sessions.forEach((session) => {
-    enqueueTrainingCompletion(readTrainingProgress(session).progress)
-  })
-}
-
 export async function flushCompletionOutbox() {
   const pending = readOutbox()
   if (pending.length === 0) return 0

@@ -6,6 +6,7 @@ import {
   resolveOnboardingDecision,
   type UserPreference,
 } from './preference-state'
+import { markFullSyncPending } from '../sync/sync-pending'
 
 export const PREFERENCE_STORAGE_KEY = 'microly:preferences:v1'
 
@@ -27,6 +28,7 @@ export function readUserPreference(availableCatalogIds: string[]) {
 export function writeUserPreference(preference: UserPreference) {
   try {
     Taro.setStorageSync(PREFERENCE_STORAGE_KEY, preference)
+    markFullSyncPending()
     return true
   } catch {
     return false
@@ -61,23 +63,13 @@ export function saveUserPreference(
 
 export function resolveStoredOnboarding(
   availableCatalogIds: string[],
-  hasExistingLearningData: boolean,
-  now = new Date().toISOString(),
 ) {
   const parsed = readUserPreference(availableCatalogIds)
-  const decision = resolveOnboardingDecision(
-    parsed,
-    hasExistingLearningData,
-    now,
-  )
+  const decision = resolveOnboardingDecision(parsed)
   const preference = decision.action === 'open_today'
     ? decision.preference
     : null
-  const migratedLegacy = decision.action === 'open_today'
-    && decision.migratedLegacy
-  const shouldWrite = Boolean(
-    preference && (parsed.recoveredFromInvalid || migratedLegacy),
-  )
+  const shouldWrite = Boolean(preference && parsed.recoveredFromInvalid)
   return {
     decision,
     recoveredFromInvalid: parsed.recoveredFromInvalid,

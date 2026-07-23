@@ -47,29 +47,21 @@ describe('user preference state', () => {
     expect(parsed.recoveredFromInvalid).toBe(true)
   })
 
-  it('区分全新用户、已完成引导和旧用户迁移', () => {
+  it('区分全新用户和已完成引导用户', () => {
     const missing = parseUserPreference(undefined, catalogIds)
-    expect(resolveOnboardingDecision(missing, false).action).toBe('show_onboarding')
+    expect(resolveOnboardingDecision(missing).action).toBe('show_onboarding')
 
     const completed = parseUserPreference(
       createCompletedPreference([catalogIds[1]], now),
       catalogIds,
     )
-    expect(resolveOnboardingDecision(completed, false)).toMatchObject({
+    expect(resolveOnboardingDecision(completed)).toMatchObject({
       action: 'open_today',
-      migratedLegacy: false,
-    })
-
-    expect(resolveOnboardingDecision(missing, true, now)).toMatchObject({
-      action: 'open_today',
-      migratedLegacy: true,
-      preference: { selectedCatalogIds: [] },
     })
   })
 
-  it('损坏偏好不会阻塞旧用户，新用户重新显示引导', () => {
+  it('损坏偏好会重新显示引导', () => {
     const invalid = parseUserPreference({ invalid: true }, catalogIds)
-    expect(resolveOnboardingDecision(invalid, false).action).toBe('show_onboarding')
-    expect(resolveOnboardingDecision(invalid, true).action).toBe('open_today')
+    expect(resolveOnboardingDecision(invalid).action).toBe('show_onboarding')
   })
 })

@@ -1,14 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { trainingContent } from '../../data/training-content'
-import { createInitialProgress, type TrainingProgress } from '../training/training-state'
 import {
-  backfillTrainingActivity,
   createDueReviewAnsweredEvent,
   createLearningActivitySummary,
   createTrainingCompletedEvent,
   mergeLearningActivityEvent,
-  toLocalDateKey,
 } from './activity-state'
 
 function localTime(year: number, month: number, day: number, hour = 12) {
@@ -148,28 +145,4 @@ describe('learning activity state', () => {
     expect(summary.weekDays.at(-1)?.isToday).toBe(true)
   })
 
-  it('从已完成训练幂等补建历史事件', () => {
-    const completedAt = localTime(2026, 7, 22)
-    const progress: TrainingProgress = {
-      ...createInitialProgress(firstSession, completedAt),
-      status: 'completed',
-      currentCardIndex: firstSession.cards.length - 1,
-      completedAt,
-    }
-    const first = backfillTrainingActivity(
-      [],
-      [firstSession],
-      { [firstSession.sessionId]: progress },
-    )
-    const second = backfillTrainingActivity(
-      first.events,
-      [firstSession],
-      { [firstSession.sessionId]: progress },
-    )
-
-    expect(first.changed).toBe(true)
-    expect(first.events).toHaveLength(1)
-    expect(second.changed).toBe(false)
-    expect(toLocalDateKey(completedAt)).toBe('2026-07-22')
-  })
 })

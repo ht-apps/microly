@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AnalyticsBatchRequestSchema, TrainingCompletionSchema } from './index'
+import { AnalyticsBatchRequestSchema, SyncRequestSchema, TrainingCompletionSchema } from './index'
 
 const event = {
   eventId: '11111111-1111-4111-8111-111111111111',
@@ -37,6 +37,20 @@ describe('API contract', () => {
       selectedOptionId: 'option-a',
       startedAt: '2026-07-23T11:00:00.000Z',
       completedAt: '2026-07-23T10:00:00.000Z',
+    }).success).toBe(false)
+  })
+
+  it('同步进度不接受主动表达或本地点评', () => {
+    expect(SyncRequestSchema.safeParse({
+      requestId: '22222222-2222-4222-8222-222222222222',
+      favorites: [], reviews: [], activities: [],
+      progress: [{
+        sessionId: 'boundary-decline-001', contentVersion: 1,
+        attemptId: 'attempt-1', status: 'in_progress', currentCardIndex: 2,
+        selectedOptionId: 'option-a', choiceConfirmed: true,
+        startedAt: '2026-07-23T10:00:00.000Z', updatedAt: '2026-07-23T10:01:00.000Z',
+        completedAt: null, practiceText: '不应上传', practiceEvaluation: [],
+      }],
     }).success).toBe(false)
   })
 })

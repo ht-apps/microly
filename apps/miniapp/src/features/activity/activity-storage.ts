@@ -1,13 +1,12 @@
 import Taro from '@tarojs/taro'
 import type { TrainingSession } from '@microly/content-schema'
 
-import type { TrainingProgress } from '../training/training-state'
 import {
-  backfillTrainingActivity,
   mergeLearningActivityEvent,
   toLocalDateKey,
   type LearningActivityEvent,
 } from './activity-state'
+import { markFullSyncPending } from '../sync/sync-pending'
 
 export const LEARNING_ACTIVITY_STORAGE_KEY = 'microly:learning-activity:v1'
 
@@ -93,6 +92,7 @@ export function readLearningActivity(sessions: TrainingSession[]) {
 export function writeLearningActivity(events: LearningActivityEvent[]) {
   try {
     Taro.setStorageSync(LEARNING_ACTIVITY_STORAGE_KEY, events)
+    markFullSyncPending()
     return true
   } catch {
     return false
@@ -101,19 +101,13 @@ export function writeLearningActivity(events: LearningActivityEvent[]) {
 
 export function syncLearningActivity(
   sessions: TrainingSession[],
-  progressBySessionId: Record<string, TrainingProgress>,
 ) {
   const stored = readLearningActivity(sessions)
-  const backfilled = backfillTrainingActivity(
-    stored.events,
-    sessions,
-    progressBySessionId,
-  )
-  const shouldWrite = stored.recoveredFromInvalid || backfilled.changed
   return {
-    events: backfilled.events,
+    events: stored.events,
     recoveredFromInvalid: stored.recoveredFromInvalid,
-    writeFailed: shouldWrite && !writeLearningActivity(backfilled.events),
+    writeFailed: stored.recoveredFromInvalid
+      && !writeLearningActivity(stored.events),
   }
 }
 

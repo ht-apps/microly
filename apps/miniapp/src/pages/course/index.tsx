@@ -150,7 +150,7 @@ export default function CoursePage() {
         <View className='course-notice'>部分本地进度损坏，已安全重置。</View>
       )}
       {reviewWarning && (
-        <View className='course-notice'>部分旧复习数据无法读取，已安全整理。</View>
+        <View className='course-notice'>部分复习数据无法读取，已安全整理。</View>
       )}
       {(preference.recoveredFromInvalid || preference.writeFailed) && (
         <View className='course-notice'>部分学习偏好无法读取，已安全整理。</View>

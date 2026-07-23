@@ -4,7 +4,6 @@ import type { TrainingSession } from '@microly/content-schema'
 import type { TrainingProgress } from '../training/training-state'
 import {
   REVIEW_INTERVALS,
-  backfillReviewsFromProgress,
   createReviewId,
   findChoiceCard,
   findTrainingOption,
@@ -12,6 +11,7 @@ import {
   upsertReviewFromTraining,
   type ReviewItem,
 } from './review-state'
+import { markFullSyncPending } from '../sync/sync-pending'
 
 export const REVIEW_STORAGE_KEY = 'microly:reviews:v1'
 
@@ -104,6 +104,7 @@ export function readReviewQueue(sessions: TrainingSession[]): ReadReviewQueueRes
 export function writeReviewQueue(items: ReviewItem[]) {
   try {
     Taro.setStorageSync(REVIEW_STORAGE_KEY, items)
+    markFullSyncPending()
     return true
   } catch {
     return false
@@ -114,21 +115,13 @@ export interface SyncedReviewQueue extends ReadReviewQueueResult {
   writeFailed: boolean
 }
 
-export function syncReviewQueueFromProgress(
-  sessions: TrainingSession[],
-  progressBySessionId: Record<string, TrainingProgress>,
-): SyncedReviewQueue {
+export function syncReviewQueue(sessions: TrainingSession[]): SyncedReviewQueue {
   const stored = readReviewQueue(sessions)
-  const backfilled = backfillReviewsFromProgress(
-    stored.items,
-    sessions,
-    progressBySessionId,
-  )
-  const shouldWrite = stored.recoveredFromInvalid || backfilled.changed
-  const writeFailed = shouldWrite && !writeReviewQueue(backfilled.items)
+  const writeFailed = stored.recoveredFromInvalid
+    && !writeReviewQueue(stored.items)
 
   return {
-    items: backfilled.items,
+    items: stored.items,
     recoveredFromInvalid: stored.recoveredFromInvalid,
     writeFailed,
   }

@@ -1,0 +1,42 @@
+.legal-page {
+  min-height: 100vh;
+  padding: 38px 34px 80px;
+  box-sizing: border-box;
+  background: #fffaf2;
+}
+
+.legal-badge,
+.legal-title,
+.legal-heading,
+.legal-copy {
+  display: block;
+}
+
+.legal-badge {
+  padding: 14px 18px;
+  color: #75581c;
+  background: #fff0c7;
+  border-radius: 14px;
+  font-size: 20px;
+}
+
+.legal-title {
+  margin-top: 30px;
+  color: #17213b;
+  font-size: 40px;
+  font-weight: 700;
+}
+
+.legal-heading {
+  margin-top: 34px;
+  color: #293148;
+  font-size: 27px;
+  font-weight: 700;
+}
+
+.legal-copy {
+  margin-top: 14px;
+  color: #666b7b;
+  font-size: 23px;
+  line-height: 1.85;
+}

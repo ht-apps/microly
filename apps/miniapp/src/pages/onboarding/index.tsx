@@ -7,15 +7,14 @@ import {
   trainingContent,
 } from '../../data/training-content'
 import { trackEvent } from '../../features/analytics/analytics-client'
-import { readLearningActivity } from '../../features/activity/activity-storage'
 import { toggleCatalogPreference } from '../../features/preference/preference-state'
 import {
   resolveStoredOnboarding,
   saveUserPreference,
 } from '../../features/preference/preference-storage'
+import { flushFullSync } from '../../features/sync/state-sync'
 import { transitionTraining } from '../../features/training/training-state'
 import {
-  readAllTrainingProgress,
   readTrainingProgress,
   writeTrainingProgress,
 } from '../../features/training/training-storage'
@@ -37,16 +36,7 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     trackEvent('onboarding_view', { isFirstVisit: true })
-    const training = readAllTrainingProgress(trainingContent.sessions)
-    const activity = readLearningActivity(trainingContent.sessions)
-    const hasExistingLearningData = Object.values(
-      training.progressBySessionId,
-    ).some((progress) => progress.status !== 'not_started')
-      || activity.events.length > 0
-    const launch = resolveStoredOnboarding(
-      catalogIds,
-      hasExistingLearningData,
-    )
+    const launch = resolveStoredOnboarding(catalogIds)
 
     if (launch.decision.action === 'open_today') {
       if (launch.writeFailed) {
@@ -78,6 +68,7 @@ export default function OnboardingPage() {
       skipped: preferenceIds.length === 0,
     })
     const saved = saveUserPreference(preferenceIds)
+    void flushFullSync()
     if (saved.writeFailed) {
       Taro.showToast({
         title: '偏好暂未保存，可稍后重新设置',
@@ -132,7 +123,7 @@ export default function OnboardingPage() {
         </Text>
 
         {recoveredFromInvalid && (
-          <View className='onboarding-notice'>旧的偏好记录无法读取，可以重新选择。</View>
+          <View className='onboarding-notice'>偏好记录无法读取，可以重新选择。</View>
         )}
 
         <View className='onboarding-example'>

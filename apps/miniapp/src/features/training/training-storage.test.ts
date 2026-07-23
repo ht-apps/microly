@@ -32,7 +32,7 @@ describe('training storage', () => {
     mocks.storage.clear()
   })
 
-  it('首组训练继续使用原有版本化存储键', () => {
+  it('训练使用版本化存储键', () => {
     expect(getTrainingStorageKey(firstSession)).toBe(
       'microly:training:boundary-decline-001:v1',
     )
@@ -51,7 +51,10 @@ describe('training storage', () => {
     expect(readTrainingProgress(secondSession).progress.sessionId).toBe(
       secondSession.sessionId,
     )
-    expect(mocks.storage.size).toBe(2)
+    expect(mocks.storage.has('microly:training:boundary-decline-001:v1')).toBe(true)
+    expect(mocks.storage.has('microly:training-private:boundary-decline-001:v1')).toBe(true)
+    expect(mocks.storage.has('microly:training:boundary-priority-002:v1')).toBe(true)
+    expect(mocks.storage.has('microly:training-private:boundary-priority-002:v1')).toBe(true)
   })
 
   it('重练清理只移除指定训练', () => {

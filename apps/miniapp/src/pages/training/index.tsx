@@ -28,6 +28,8 @@ import {
   enqueueTrainingCompletion,
   flushCompletionOutbox,
 } from '../../features/sync/completion-sync'
+import { flushFullSync } from '../../features/sync/state-sync'
+import { isNetworkEnabled } from '../../features/network/network-config'
 import TrainingCardRenderer, {
   CompletedTrainingReview,
 } from '../../features/training/TrainingCardRenderer'
@@ -174,6 +176,7 @@ export default function TrainingPage() {
         })
         enqueueTrainingCompletion(nextProgress)
         void flushCompletionOutbox()
+        void flushFullSync()
         void flushAnalyticsOutbox()
         if (nextProgress.completedAt) {
           const activity = recordLearningActivity(
@@ -194,6 +197,19 @@ export default function TrainingPage() {
         )
         setReviewDueAt(review.item?.dueAt ?? null)
         if (review.writeFailed) setStorageWarning(true)
+        const prompted = Taro.getStorageSync('microly:account:login-prompted:v1')
+        if (!prompted && isNetworkEnabled()) {
+          Taro.setStorageSync('microly:account:login-prompted:v1', true)
+          trackEvent('login_prompt', { entry: 'training_complete' })
+          void Taro.showModal({
+            title: '保留这次学习',
+            content: '登录微信后，可在其他设备恢复进度、收藏和复习计划。',
+            confirmText: '去登录',
+            cancelText: '稍后',
+          }).then((result) => {
+            if (result.confirm) Taro.navigateTo({ url: '/pages/settings/index' })
+          })
+        }
       }
       return nextProgress
     })
@@ -214,6 +230,7 @@ export default function TrainingPage() {
     if (result.recoveredFromInvalid) setFavoriteRecoveredFromInvalid(true)
     setFavoriteStorageWarning(false)
     setIsPrincipleFavorite(result.isFavorite)
+    void flushFullSync()
   }
 
   const returnToEntry = async () => {
@@ -298,10 +315,10 @@ export default function TrainingPage() {
             : favoriteStorageWarning
             ? '收藏暂时无法保存，其他训练内容不受影响。'
             : favoriteRecoveredFromInvalid
-              ? '部分旧收藏无法读取，已安全整理。'
+              ? '部分收藏数据无法读取，已安全整理。'
             : storageWarning
               ? '当前进度暂时无法保存，请保持页面开启。'
-              : '旧的本地进度无法读取，已从头开始。'}
+              : '本地进度无法读取，已从头开始。'}
         </View>
       )}
 

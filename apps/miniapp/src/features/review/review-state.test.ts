@@ -6,7 +6,6 @@ import {
   type TrainingProgress,
 } from '../training/training-state'
 import {
-  backfillReviewsFromProgress,
   createReviewOverview,
   findChoiceCard,
   scheduleReviewAnswer,
@@ -124,24 +123,6 @@ describe('review state', () => {
     expect(reset.item?.intervalDays).toBe(1)
     expect(reset.item?.consecutiveCorrect).toBe(0)
     expect(reset.item?.dueAt).toBe('2026-07-26T08:00:00.000Z')
-  })
-
-  it('历史补建保持幂等', () => {
-    const progress = completedProgress(
-      firstSession.sessionId,
-      firstSession.contentVersion,
-      wrongOption.id,
-    )
-    const first = backfillReviewsFromProgress([], [firstSession], {
-      [firstSession.sessionId]: progress,
-    })
-    const second = backfillReviewsFromProgress(first.items, [firstSession], {
-      [firstSession.sessionId]: progress,
-    })
-
-    expect(first.changed).toBe(true)
-    expect(second.changed).toBe(false)
-    expect(second.items).toHaveLength(1)
   })
 
   it('正确复习按 3、7、14 天推进，错误回到 1 天', () => {

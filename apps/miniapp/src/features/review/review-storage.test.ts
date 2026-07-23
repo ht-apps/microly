@@ -7,8 +7,6 @@ import {
   REVIEW_STORAGE_KEY,
   parseReviewQueue,
   readReviewQueue,
-  syncReviewQueueFromProgress,
-  writeReviewQueue,
 } from './review-storage'
 
 const mocks = vi.hoisted(() => ({
@@ -71,19 +69,4 @@ describe('review storage', () => {
     })
   })
 
-  it('从历史完成记录补建并持久化复习项', () => {
-    const synced = syncReviewQueueFromProgress(trainingContent.sessions, {
-      [session.sessionId]: completedProgress,
-    })
-
-    expect(synced.items).toHaveLength(1)
-    expect(synced.writeFailed).toBe(false)
-    expect(mocks.storage.get(REVIEW_STORAGE_KEY)).toHaveLength(1)
-
-    writeReviewQueue(synced.items)
-    const repeated = syncReviewQueueFromProgress(trainingContent.sessions, {
-      [session.sessionId]: completedProgress,
-    })
-    expect(repeated.items).toHaveLength(1)
-  })
 })

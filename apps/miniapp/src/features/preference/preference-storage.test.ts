@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCompletedPreference } from './preference-state'
 import {
   PREFERENCE_STORAGE_KEY,
-  resolveStoredOnboarding,
   saveUserPreference,
   syncUserPreference,
 } from './preference-storage'
@@ -48,17 +47,6 @@ describe('user preference storage', () => {
     expect(result.recoveredFromInvalid).toBe(true)
     expect(result.writeFailed).toBe(false)
     expect(result.preference?.selectedCatalogIds).toEqual([catalogIds[0]])
-  })
-
-  it('旧用户缺少偏好时自动创建兼容记录', () => {
-    const result = resolveStoredOnboarding(catalogIds, true, now)
-    expect(result.decision).toMatchObject({
-      action: 'open_today',
-      migratedLegacy: true,
-    })
-    expect(mocks.storage.get(PREFERENCE_STORAGE_KEY)).toMatchObject({
-      selectedCatalogIds: [],
-    })
   })
 
   it('写入失败时仍返回可供页面继续使用的偏好', () => {

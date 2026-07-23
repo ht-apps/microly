@@ -8,6 +8,7 @@ import {
   saveUserPreference,
   syncUserPreference,
 } from '../../features/preference/preference-storage'
+import { flushFullSync } from '../../features/sync/state-sync'
 
 import './index.scss'
 
@@ -39,6 +40,7 @@ export default function PreferencesPage() {
       selectedCatalogIds,
       stored.preference,
     )
+    void flushFullSync()
     if (result.writeFailed) {
       setStorageWarning(true)
       return

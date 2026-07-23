@@ -1,13 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { trainingContent } from '../../data/training-content'
-import { createInitialProgress, type TrainingProgress } from '../training/training-state'
 import { createTrainingCompletedEvent } from './activity-state'
 import {
   LEARNING_ACTIVITY_STORAGE_KEY,
   parseLearningActivity,
   recordLearningActivity,
-  syncLearningActivity,
 } from './activity-storage'
 
 const mocks = vi.hoisted(() => ({
@@ -60,27 +58,4 @@ describe('learning activity storage', () => {
     expect(mocks.storage.get(LEARNING_ACTIVITY_STORAGE_KEY)).toEqual([event])
   })
 
-  it('同步时从完成进度补建且保持幂等', () => {
-    const completedAt = '2026-07-22T08:00:00.000Z'
-    const progress: TrainingProgress = {
-      ...createInitialProgress(firstSession, completedAt),
-      status: 'completed',
-      currentCardIndex: firstSession.cards.length - 1,
-      completedAt,
-    }
-    const progressBySessionId = { [firstSession.sessionId]: progress }
-    const first = syncLearningActivity(
-      trainingContent.sessions,
-      progressBySessionId,
-    )
-    const second = syncLearningActivity(
-      trainingContent.sessions,
-      progressBySessionId,
-    )
-
-    expect(first.events).toHaveLength(1)
-    expect(first.writeFailed).toBe(false)
-    expect(second.events).toHaveLength(1)
-    expect(second.writeFailed).toBe(false)
-  })
 })

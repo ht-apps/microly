@@ -13,6 +13,7 @@ import {
 } from '../../features/review/review-state'
 import { readReviewSnapshot } from '../../features/review/review-snapshot'
 import { saveReviewAnswer } from '../../features/review/review-storage'
+import { flushFullSync } from '../../features/sync/state-sync'
 import {
   createReviewRunState,
   transitionReviewRun,
@@ -76,6 +77,7 @@ export default function ReviewPage() {
       runState.selectedOptionId,
       answeredAt,
     )
+    void flushFullSync()
     if (!saved.result) return
 
     if (saved.writeFailed || saved.recoveredFromInvalid) {
@@ -260,10 +262,9 @@ export default function ReviewPage() {
 
       {(
         snapshot.recoveredFromInvalid
-        || snapshot.trainingProgressRecovered
         || snapshot.writeFailed
       ) && (
-        <View className='review-notice'>部分旧复习数据无法读取，已安全整理。</View>
+        <View className='review-notice'>部分复习数据无法读取，已安全整理。</View>
       )}
 
       {!hasReviews && (

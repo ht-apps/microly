@@ -16,10 +16,7 @@ export function readProfileSnapshot(now?: string) {
   )
   const reviews = readReviewSnapshot(now)
   const favorites = syncFavoriteQueue(trainingContent.sessions)
-  const activity = syncLearningActivity(
-    trainingContent.sessions,
-    training.progressBySessionId,
-  )
+  const activity = syncLearningActivity(trainingContent.sessions)
   const activitySummary = createLearningActivitySummary(activity.events, now)
   const preference = readPreferenceSnapshot()
 
@@ -37,7 +34,6 @@ export function readProfileSnapshot(now?: string) {
     recoveredFromInvalid:
       training.recoveredSessionIds.length > 0
       || reviews.recoveredFromInvalid
-      || reviews.trainingProgressRecovered
       || favorites.recoveredFromInvalid
       || activity.recoveredFromInvalid
       || preference.recoveredFromInvalid,

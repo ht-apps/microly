@@ -25,10 +25,7 @@ import './index.scss'
 function readHomeSnapshot() {
   const stored = readAllTrainingProgress(trainingContent.sessions)
   const reviews = readReviewSnapshot()
-  const activity = syncLearningActivity(
-    trainingContent.sessions,
-    stored.progressBySessionId,
-  )
+  const activity = syncLearningActivity(trainingContent.sessions)
   const preference = readPreferenceSnapshot()
   return {
     overview: createCourseOverview(
@@ -158,7 +155,7 @@ export default function Index() {
       )}
 
       {reviewWarning && (
-        <View className='notice-banner'>部分旧复习数据无法读取，已安全整理。</View>
+        <View className='notice-banner'>部分复习数据无法读取，已安全整理。</View>
       )}
 
       {activityWarning && (

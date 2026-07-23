@@ -14,7 +14,11 @@ if (!databaseUrl.includes('microly_test')) {
 }
 
 const database = createDatabase(databaseUrl)
-const app = createApp({ databaseUrl })
+const app = createApp({
+  databaseUrl,
+  wechat: { appId: 'wx-test', appSecret: 'test-secret', identityHashSecret: 'identity-secret-with-at-least-32-characters' },
+  exchangeWechatCode: async (code) => ({ openid: code }),
+})
 let authorization = ''
 let issuedToken = ''
 
@@ -54,13 +58,15 @@ describe('network MVP API', () => {
     const session = trainingContentBundle.sessions['boundary-decline-001']
     if (!session) throw new Error('缺少集成测试内容')
     const option = session.cards.find((card) => card.type === 'choice')?.options[0]
+    const completedAt = new Date(Date.now() - 60_000).toISOString()
+    const startedAt = new Date(Date.now() - 240_000).toISOString()
     const completion = {
-      syncId: 'completion:boundary-decline-001:v1:2026-07-23T10:03:00.000Z',
+      syncId: `completion:boundary-decline-001:v1:${completedAt}`,
       sessionId: session.sessionId,
       contentVersion: session.contentVersion,
       selectedOptionId: option?.id,
-      startedAt: '2026-07-23T10:00:00.000Z',
-      completedAt: '2026-07-23T10:03:00.000Z',
+      startedAt,
+      completedAt,
     }
     const first = await app.inject({
       method: 'POST', url: '/v1/training-completions', headers: { authorization }, payload: completion,
@@ -77,6 +83,8 @@ describe('network MVP API', () => {
   })
 
   it('拒绝非法选项并对埋点去重', async () => {
+    const completedAt = new Date(Date.now() - 60_000).toISOString()
+    const startedAt = new Date(Date.now() - 240_000).toISOString()
     const invalid = await app.inject({
       method: 'POST',
       url: '/v1/training-completions',
@@ -86,8 +94,8 @@ describe('network MVP API', () => {
         sessionId: 'boundary-decline-001',
         contentVersion: 1,
         selectedOptionId: 'missing-option',
-        startedAt: '2026-07-23T10:00:00.000Z',
-        completedAt: '2026-07-23T10:03:00.000Z',
+        startedAt,
+        completedAt,
       },
     })
     expect(invalid.statusCode).toBe(422)
@@ -116,5 +124,64 @@ describe('network MVP API', () => {
       createHash('sha256').update(issuedToken).digest('hex'),
     )
     expect(sessions.rows[0].token_hash).not.toBe(issuedToken)
+  })
+
+  it('幂等合并安全学习状态', async () => {
+    const session = trainingContentBundle.sessions['boundary-decline-001']
+    const choice = session?.cards.find((card) => card.type === 'choice')
+    const option = choice?.options[0]
+    const principle = session?.cards.find((card) => card.type === 'principle')
+    if (!session || !choice || !option || !principle) throw new Error('缺少同步测试内容')
+    const updatedAt = new Date(Date.now() - 60_000).toISOString()
+    const payload = {
+      requestId: '33333333-3333-4333-8333-333333333333',
+      preference: {
+        schemaVersion: 1, onboardingStatus: 'completed', selectedCatalogIds: ['boundary-communication'],
+        completedAt: updatedAt, updatedAt,
+      },
+      favorites: [{
+        favoriteId: `${session.sessionId}:${principle.id}`, sessionId: session.sessionId,
+        contentVersion: session.contentVersion, cardId: principle.id, active: true,
+        createdAt: updatedAt, updatedAt,
+      }],
+      reviews: [],
+      progress: [{
+        sessionId: session.sessionId, contentVersion: session.contentVersion,
+        attemptId: 'integration-attempt', status: 'in_progress', currentCardIndex: 1,
+        selectedOptionId: option.id, choiceConfirmed: false,
+        startedAt: updatedAt, updatedAt, completedAt: null,
+      }],
+      activities: [],
+    }
+    const first = await app.inject({ method: 'POST', url: '/v1/sync', headers: { authorization }, payload })
+    const repeated = await app.inject({ method: 'POST', url: '/v1/sync', headers: { authorization }, payload })
+    expect(first.statusCode).toBe(200)
+    expect(repeated.statusCode).toBe(200)
+    expect(first.json().data.favorites).toHaveLength(1)
+    expect(first.json().data.progress[0]).not.toHaveProperty('practiceText')
+    const requests = await database.pool.query('SELECT count(*)::int AS count FROM sync_requests')
+    expect(requests.rows[0].count).toBe(1)
+  })
+
+  it('微信登录升级游客并拒绝换绑其他微信身份', async () => {
+    const upgraded = await app.inject({
+      method: 'POST', url: '/v1/auth/wechat', headers: { authorization }, payload: { code: 'openid-a' },
+    })
+    expect(upgraded.statusCode).toBe(200)
+    expect(upgraded.json().data.authType).toBe('wechat')
+    const wechatAuthorization = `Bearer ${upgraded.json().data.token}`
+    const conflict = await app.inject({
+      method: 'POST', url: '/v1/auth/wechat', headers: { authorization: wechatAuthorization }, payload: { code: 'openid-b' },
+    })
+    expect(conflict.statusCode).toBe(409)
+    expect(conflict.json().error.code).toBe('ACCOUNT_CONFLICT')
+
+    const secondGuest = await app.inject({ method: 'POST', url: '/v1/auth/guest', payload: { installationId: '44444444-4444-4444-8444-444444444444' } })
+    const merged = await app.inject({
+      method: 'POST', url: '/v1/auth/wechat',
+      headers: { authorization: `Bearer ${secondGuest.json().data.token}` }, payload: { code: 'openid-a' },
+    })
+    expect(merged.statusCode).toBe(200)
+    expect(merged.json().data.merged).toBe(true)
   })
 })

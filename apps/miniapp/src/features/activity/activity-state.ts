@@ -1,7 +1,4 @@
-import type { TrainingSession } from '@microly/content-schema'
-
 import type { ReviewItem } from '../review/review-state'
-import type { TrainingProgress } from '../training/training-state'
 
 export type LearningActivityEvent =
   | {
@@ -113,26 +110,6 @@ export function mergeLearningActivityEvent(
   return [...events, event].sort(
     (left, right) => Date.parse(left.occurredAt) - Date.parse(right.occurredAt),
   )
-}
-
-export function backfillTrainingActivity(
-  events: LearningActivityEvent[],
-  sessions: TrainingSession[],
-  progressBySessionId: Record<string, TrainingProgress>,
-) {
-  let nextEvents = events
-  sessions.forEach((session) => {
-    const progress = progressBySessionId[session.sessionId]
-    if (progress?.status !== 'completed' || !progress.completedAt) return
-    nextEvents = mergeLearningActivityEvent(
-      nextEvents,
-      createTrainingCompletedEvent(session.sessionId, progress.completedAt),
-    )
-  })
-  return {
-    events: nextEvents,
-    changed: nextEvents !== events,
-  }
 }
 
 function summarizeDate(events: LearningActivityEvent[], dateKey: string) {

@@ -4,6 +4,7 @@ import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
 import { setSessionFavorite, syncFavoriteQueue } from '../../features/favorite/favorite-storage'
+import { flushFullSync } from '../../features/sync/state-sync'
 import type { ResolvedFavoriteItem } from '../../features/favorite/favorite-state'
 import { transitionTraining } from '../../features/training/training-state'
 import {
@@ -34,6 +35,7 @@ export default function FavoritesPage() {
       entry.session,
       false,
     )
+    void flushFullSync()
     if (result.writeFailed) {
       setStorageWarning(true)
       return
@@ -76,7 +78,7 @@ export default function FavoritesPage() {
         <View className='favorites-notice'>
           {storageWarning
             ? '收藏暂时无法完整保存，请保持页面开启。'
-            : '部分旧收藏无法读取，已安全整理。'}
+            : '部分收藏数据无法读取，已安全整理。'}
         </View>
       )}
 
