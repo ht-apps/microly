@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  AdminContentIndexResponseSchema,
+  AdminDraftValidationResponseSchema,
+  AdminFeedbackListResponseSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminMetricsResponseSchema,
   AdminPublishRequestSchema,
@@ -79,5 +82,22 @@ describe('API contract', () => {
     }
     expect(AdminMetricsResponseSchema.safeParse(value).success).toBe(true)
     expect(AdminMetricsResponseSchema.safeParse({ ...value, data: { ...value.data, accountId: '11111111-1111-4111-8111-111111111111' } }).success).toBe(false)
+  })
+
+  it('严格校验后台列表和草稿校验响应', () => {
+    expect(AdminContentIndexResponseSchema.safeParse({ data: {
+      currentVersion: 1, releases: [], drafts: [],
+    } }).success).toBe(true)
+    expect(AdminContentIndexResponseSchema.safeParse({ data: {
+      currentVersion: 1, releases: [], drafts: [], token: 'never-return-this',
+    } }).success).toBe(false)
+    expect(AdminDraftValidationResponseSchema.safeParse({ data: {
+      valid: false,
+      issues: [{ path: 'sessions.example', message: '训练无效', severity: 'error' }],
+      normalizedBundle: null,
+    } }).success).toBe(true)
+    expect(AdminFeedbackListResponseSchema.safeParse({ data: {
+      items: [], total: 0, page: 1, pageSize: 20,
+    } }).success).toBe(true)
   })
 })

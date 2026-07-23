@@ -327,6 +327,54 @@ export const AdminMetricsResponseSchema = z.object({
   }).strict(),
 }).strict()
 
+export const AdminSessionResponseSchema = z.object({
+  data: z.object({ authenticated: z.literal(true) }).strict(),
+}).strict()
+
+export const AdminContentIndexResponseSchema = z.object({
+  data: z.object({
+    currentVersion: ContentVersionSchema.nullable(),
+    releases: z.array(AdminContentReleaseSchema),
+    drafts: z.array(AdminContentDraftSchema),
+  }).strict(),
+}).strict()
+
+export const AdminDraftResponseSchema = z.object({ data: AdminContentDraftSchema }).strict()
+
+export const AdminDraftValidationResponseSchema = z.object({
+  data: z.object({
+    valid: z.boolean(),
+    issues: z.array(AdminValidationIssueSchema),
+    normalizedBundle: z.unknown().nullable(),
+  }).strict(),
+}).strict()
+
+export const AdminPublishResponseSchema = z.object({
+  data: z.object({
+    releaseVersion: ContentVersionSchema,
+    checksum: z.string().regex(/^[a-f0-9]{64}$/),
+  }).strict(),
+}).strict()
+
+export const AdminWithdrawResponseSchema = z.object({
+  data: z.object({
+    sessionId: SessionIdSchema,
+    releaseVersion: ContentVersionSchema,
+    checksum: z.string().regex(/^[a-f0-9]{64}$/),
+  }).strict(),
+}).strict()
+
+export const AdminFeedbackListResponseSchema = z.object({
+  data: z.object({
+    items: z.array(AdminFeedbackSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive().max(100),
+  }).strict(),
+}).strict()
+
+export const AdminFeedbackResponseSchema = z.object({ data: AdminFeedbackSchema }).strict()
+
 export type TrainingCompletion = z.infer<typeof TrainingCompletionSchema>
 export type AnalyticsEvent = z.infer<typeof AnalyticsEventSchema>
 export type AnalyticsBatchRequest = z.infer<typeof AnalyticsBatchRequestSchema>
@@ -343,3 +391,6 @@ export type AdminContentDraft = z.infer<typeof AdminContentDraftSchema>
 export type AdminContentRelease = z.infer<typeof AdminContentReleaseSchema>
 export type AdminFeedback = z.infer<typeof AdminFeedbackSchema>
 export type AdminMetrics = z.infer<typeof AdminMetricsResponseSchema>['data']
+export type AdminContentIndex = z.infer<typeof AdminContentIndexResponseSchema>['data']
+export type AdminDraftValidation = z.infer<typeof AdminDraftValidationResponseSchema>['data']
+export type AdminFeedbackList = z.infer<typeof AdminFeedbackListResponseSchema>['data']
