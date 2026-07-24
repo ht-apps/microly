@@ -22,7 +22,9 @@ export const JsonEditor = forwardRef<JsonEditorHandle, {
   value: string
   issues: EditorIssue[]
   onChange: (value: string) => void
-}>(({ value, issues, onChange }, ref) => {
+  readOnly?: boolean
+  height?: string
+}>(({ value, issues, onChange, readOnly = false, height = '620px' }, ref) => {
   const editorRef = useRef<MonacoEditor.IStandaloneCodeEditor | null>(null)
   const monacoRef = useRef<typeof monaco | null>(null)
   const mount: OnMount = (editor, monaco) => {
@@ -63,7 +65,7 @@ export const JsonEditor = forwardRef<JsonEditorHandle, {
     monaco.editor.setModelMarkers(model, 'microly-validation', markers)
   }, [issues, value])
   return <Editor
-    height="620px"
+    height={height}
     language="json"
     value={value}
     onChange={(next) => onChange(next ?? '')}
@@ -71,9 +73,11 @@ export const JsonEditor = forwardRef<JsonEditorHandle, {
     loading="正在加载 JSON 编辑器…"
     options={{
       automaticLayout: true,
+      readOnly,
+      domReadOnly: readOnly,
       minimap: { enabled: false },
       folding: true,
-      formatOnPaste: true,
+      formatOnPaste: !readOnly,
       scrollBeyondLastLine: false,
       tabSize: 2,
       wordWrap: 'off',

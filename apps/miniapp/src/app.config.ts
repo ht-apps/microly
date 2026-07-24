@@ -12,6 +12,7 @@ export default defineAppConfig({
     'pages/settings/index',
     'pages/privacy/index',
     'pages/ai-info/index',
+    'pages/weekly-report/index',
     'pages/agreement/index',
     'pages/feedback/index'
   ],

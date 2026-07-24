@@ -28,6 +28,7 @@ export default function ProfilePage() {
   const { summary } = snapshot
   const openCourse = () => Taro.switchTab({ url: '/pages/course/index' })
   const openReviews = () => Taro.navigateTo({ url: '/pages/review/index' })
+  const openWeeklyReport = () => Taro.navigateTo({ url: '/pages/weekly-report/index' })
   const openFavorites = () => Taro.navigateTo({ url: '/pages/favorites/index' })
   const openPreferences = () => Taro.navigateTo({ url: '/pages/preferences/index' })
   const openSettings = () => Taro.navigateTo({ url: '/pages/settings/index' })
@@ -135,6 +136,13 @@ export default function ProfilePage() {
 
       <Text className='profile-section-title'>学习内容</Text>
       <View className='profile-link-list'>
+        <Button className='microly-button profile-link' onClick={openWeeklyReport}>
+          <View className='profile-link__content'>
+            <Text className='profile-link__title'>学习周报</Text>
+            <Text className='profile-link__body'>回看最近 8 周的训练、复习与表达反馈</Text>
+          </View>
+          <Text className='profile-link__meta'>›</Text>
+        </Button>
         <Button className='microly-button profile-link' onClick={openPreferences}>
           <View className='profile-link__content'>
             <Text className='profile-link__title'>学习偏好</Text>

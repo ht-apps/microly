@@ -11,6 +11,7 @@ import { createSecureUuid } from '../network/identifier'
 import { isNetworkEnabled } from '../network/network-config'
 import type { TrainingProgress } from '../training/training-state'
 import { resolveAiAccessState } from './ai-access'
+import { readCachedAiEvaluations, writeCachedAiEvaluations } from './ai-history-storage'
 
 export function readAiAccessState() {
   return resolveAiAccessState({
@@ -57,10 +58,19 @@ export async function getAiEvaluation(id: string): Promise<AiEvaluation | null> 
 }
 
 export async function listAiEvaluations(sessionId?: string): Promise<AiEvaluation[]> {
-  const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ''
-  const response = await authorizedRequest<unknown>({ path: `/v1/ai/evaluations${query}`, method: 'GET' })
-  const parsed = AiEvaluationListResponseSchema.safeParse(response?.data)
-  return parsed.success ? parsed.data.data.items : []
+  const items: AiEvaluation[] = []
+  let cursor: string | null = null
+  for (let page = 0; page < 2; page += 1) {
+    const query = [`limit=50`, sessionId ? `sessionId=${encodeURIComponent(sessionId)}` : '', cursor ? `cursor=${encodeURIComponent(cursor)}` : ''].filter(Boolean).join('&')
+    const response = await authorizedRequest<unknown>({ path: `/v1/ai/evaluations?${query}`, method: 'GET' })
+    const parsed = AiEvaluationListResponseSchema.safeParse(response?.data)
+    if (!parsed.success) return sessionId ? readCachedAiEvaluations().filter((item) => item.sessionId === sessionId) : readCachedAiEvaluations()
+    items.push(...parsed.data.data.items)
+    cursor = parsed.data.data.nextCursor
+    if (!cursor) break
+  }
+  const cached = writeCachedAiEvaluations(items)
+  return sessionId ? cached.filter((item) => item.sessionId === sessionId) : cached
 }
 
 export async function rateAiEvaluation(id: string, helpful: boolean, reason: string | null = null) {

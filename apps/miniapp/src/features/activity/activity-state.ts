@@ -15,6 +15,9 @@ export type LearningActivityEvent =
       localDateKey: string
       sessionId: string
       reviewId: string
+      variantId?: string | null
+      selectedOptionRating?: 'recommended' | 'risky' | 'not_recommended'
+      isCorrect?: boolean
     }
 
 export interface LearningWeekDay {
@@ -57,7 +60,7 @@ export function addLocalDays(dateKey: string, days: number) {
   return toLocalDateKey(date)
 }
 
-function startOfLocalWeek(dateKey: string) {
+export function startOfLocalWeek(dateKey: string) {
   const date = dateFromLocalKey(dateKey)
   const weekday = date.getDay()
   const daysFromMonday = weekday === 0 ? 6 : weekday - 1
@@ -89,6 +92,7 @@ export function createTrainingCompletedEvent(
 export function createDueReviewAnsweredEvent(
   item: Pick<ReviewItem, 'dueAt' | 'reviewId' | 'sessionId'>,
   answeredAt: string,
+  result?: { variantId: string | null; selectedOptionRating: 'recommended' | 'risky' | 'not_recommended'; isCorrect: boolean },
 ): LearningActivityEvent | null {
   if (Date.parse(item.dueAt) > Date.parse(answeredAt)) return null
 
@@ -99,6 +103,7 @@ export function createDueReviewAnsweredEvent(
     localDateKey: toLocalDateKey(answeredAt),
     sessionId: item.sessionId,
     reviewId: item.reviewId,
+    ...(result ? { variantId: result.variantId, selectedOptionRating: result.selectedOptionRating, isCorrect: result.isCorrect } : {}),
   }
 }
 

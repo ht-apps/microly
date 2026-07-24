@@ -359,9 +359,20 @@ export function createApp(options: CreateAppOptions) {
     if (timestamps.some(isFuture)) return error(reply, 422, 'future_timestamp', '同步时间超出允许范围。')
     const invalidContent = [
       ...input.favorites.map((v) => v.favoriteId === `${v.sessionId}:${v.cardId}` && matchingSession(bundles, v.sessionId, v.contentVersion)?.cards.some((c) => c.id === v.cardId && c.type === 'principle')),
-      ...input.reviews.map((v) => v.reviewId === `${v.sessionId}:choice` && matchingSession(bundles, v.sessionId, v.contentVersion)?.cards.some((c) => c.id === v.sourceCardId && c.type === 'choice' && c.options.some((o) => o.id === v.lastSelectedOptionId))),
+      ...input.reviews.map((v) => {
+        const session = matchingSession(bundles, v.sessionId, v.contentVersion)
+        const options = v.lastVariantId
+          ? session?.reviewVariants.find((variant) => variant.variantId === v.lastVariantId)?.options
+          : session?.cards.flatMap((card) => card.type === 'choice' && card.id === v.sourceCardId ? [card.options] : [])[0]
+        return v.reviewId === `${v.sessionId}:choice` && Boolean(options?.some((option) => option.id === v.lastSelectedOptionId))
+      }),
       ...input.progress.map((v) => { const s = matchingSession(bundles, v.sessionId, v.contentVersion); return s && v.currentCardIndex < s.cards.length && (!v.selectedOptionId || s.cards.some((c) => c.type === 'choice' && c.options.some((o) => o.id === v.selectedOptionId))) }),
-      ...input.activities.map((v) => Boolean(bundles.some((b) => b.sessions[v.sessionId]))),
+      ...input.activities.map((v) => {
+        const sessions = bundles.map((bundle) => bundle.sessions[v.sessionId]).filter((session): session is NonNullable<typeof session> => Boolean(session))
+        if (!sessions.length) return false
+        if (v.type === 'due_review_answered' && v.variantId) return sessions.some((session) => session.reviewVariants.some((variant) => variant.variantId === v.variantId))
+        return true
+      }),
     ].some((valid) => !valid)
     if (invalidContent) return error(reply, 422, 'invalid_sync_content', '同步记录引用了无效课程内容。')
     await database.db.transaction(async (tx) => {

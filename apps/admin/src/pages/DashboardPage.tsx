@@ -58,6 +58,17 @@ export default function DashboardPage() {
           { title: '完成率', dataIndex: 'completionRate', width: 140, render: (value: number) => `${(value * 100).toFixed(1)}%` },
         ]} />
       </Card>
+      <Row gutter={[16, 16]} className="dashboard-row">
+        <Col xs={24} xl={12}><Card title="复习变体表现"><Row gutter={12}>
+          <Col span={8}><Statistic title="原题复习" value={query.data.review.originalAnswers} /></Col>
+          <Col span={8}><Statistic title="变体复习" value={query.data.review.variantAnswers} /></Col>
+          <Col span={8}><Statistic title="变体正确率" value={query.data.review.variantCorrectRate === null ? '-' : `${(query.data.review.variantCorrectRate * 100).toFixed(1)}%`} /></Col>
+        </Row></Card></Col>
+        <Col xs={24} xl={12}><Card title="学习周报"><Row gutter={12}>
+          <Col span={12}><Statistic title="查看次数" value={query.data.review.weeklyReportViews} /></Col>
+          <Col span={12}><Statistic title="行动点击" value={query.data.review.weeklyReportActions} /></Col>
+        </Row></Card></Col>
+      </Row>
     </>}
   </section>
 }

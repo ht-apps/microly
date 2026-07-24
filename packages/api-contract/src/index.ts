@@ -1,4 +1,4 @@
-import { TrainingContentBundleSchema } from '@microly/content-schema'
+import { ReviewVariantSchema, TrainingContentBundleSchema } from '@microly/content-schema'
 import { z } from 'zod'
 
 const IsoTimeSchema = z.iso.datetime({ offset: true })
@@ -112,6 +112,11 @@ const AiEvaluationPropertiesSchema = z.object({
   latencyMs: z.number().int().nonnegative().optional(),
 }).strict()
 const AiEvaluationRatingPropertiesSchema = z.object({ helpful: z.boolean() }).strict()
+const WeeklyReportViewPropertiesSchema = z.object({ weekOffset: z.number().int().min(0).max(7) }).strict()
+const WeeklyReportActionPropertiesSchema = z.object({
+  weekOffset: z.number().int().min(0).max(7),
+  action: z.enum(['review', 'training']),
+}).strict()
 
 function event<Name extends string, Schema extends z.ZodType>(name: Name, properties: Schema) {
   return z.object({
@@ -135,6 +140,8 @@ export const AnalyticsEventSchema = z.discriminatedUnion('name', [
   event('feedback_submit', FeedbackSubmitPropertiesSchema),
   event('ai_evaluation', AiEvaluationPropertiesSchema),
   event('ai_evaluation_rating', AiEvaluationRatingPropertiesSchema),
+  event('weekly_report_view', WeeklyReportViewPropertiesSchema),
+  event('weekly_report_action', WeeklyReportActionPropertiesSchema),
 ])
 
 export const AnalyticsBatchRequestSchema = z.object({
@@ -176,6 +183,8 @@ export const ReviewSyncRecordSchema = z.object({
   createdAt: IsoTimeSchema,
   updatedAt: IsoTimeSchema,
   lastReviewedAt: IsoTimeSchema.nullable(),
+  reviewCount: z.number().int().nonnegative().default(0),
+  lastVariantId: SessionIdSchema.nullable().default(null),
 }).strict()
 
 export const TrainingProgressSyncRecordSchema = z.object({
@@ -216,6 +225,9 @@ export const LearningActivitySyncRecordSchema = z.discriminatedUnion('type', [
     localDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     sessionId: SessionIdSchema,
     reviewId: IdentifierSchema,
+    variantId: SessionIdSchema.nullable().optional(),
+    selectedOptionRating: z.enum(['recommended', 'risky', 'not_recommended']).optional(),
+    isCorrect: z.boolean().optional(),
   }).strict(),
 ])
 
@@ -382,6 +394,14 @@ export const AdminAiMetricsResponseSchema = z.object({ data: z.object({
   formatRetryRate: z.number().min(0).max(1),
   helpfulRate: z.number().min(0).max(1).nullable(),
   models: z.array(z.object({ modelId: z.string(), count: z.number().int().nonnegative() }).strict()),
+  contentGeneration: z.object({
+    total: z.number().int().nonnegative(),
+    succeeded: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    promptTokens: z.number().int().nonnegative(),
+    completionTokens: z.number().int().nonnegative(),
+    estimatedCostUsd: z.number().nonnegative(),
+  }).strict(),
 }).strict() }).strict()
 
 export const AdminFeedbackStatusSchema = z.enum(['new', 'in_progress', 'resolved', 'dismissed'])
@@ -396,6 +416,10 @@ export const AdminDraftUpdateRequestSchema = z.object({
   bundle: z.unknown(),
 }).strict()
 
+export const AdminDraftStateRequestSchema = z.object({
+  revision: z.number().int().positive(),
+}).strict()
+
 export const AdminPublishRequestSchema = z.object({
   revision: z.number().int().positive(),
   reason: z.string().trim().min(3).max(300),
@@ -405,6 +429,17 @@ export const AdminWithdrawRequestSchema = z.object({
   confirmation: z.literal('WITHDRAW'),
   reason: z.string().trim().min(3).max(300),
 }).strict()
+
+export const AdminReviewVariantGenerateRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  count: z.number().int().min(1).max(3).default(3),
+}).strict()
+
+export const AdminReviewVariantGenerateResponseSchema = z.object({ data: z.object({
+  candidates: z.array(ReviewVariantSchema).min(1).max(3),
+  model: z.object({ modelId: z.string().min(1), configRevision: z.number().int().positive(), promptVersion: z.literal('review-variant-v1') }).strict(),
+  warnings: z.array(z.string().max(200)),
+}).strict() }).strict()
 
 export const AdminFeedbackUpdateRequestSchema = z.object({
   status: AdminFeedbackStatusSchema,
@@ -464,6 +499,14 @@ export const AdminMetricsResponseSchema = z.object({
     daily: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), starts: z.number().int().nonnegative(), completions: z.number().int().nonnegative() })),
     sessions: z.array(z.object({ sessionId: SessionIdSchema, starts: z.number().int().nonnegative(), completions: z.number().int().nonnegative(), completionRate: z.number().min(0).max(1) })).max(10),
     feedback: z.object({ total: z.number().int().nonnegative(), byStatus: z.record(AdminFeedbackStatusSchema, z.number().int().nonnegative()), byCategory: z.record(z.string(), z.number().int().nonnegative()) }).strict(),
+    review: z.object({
+      originalAnswers: z.number().int().nonnegative(),
+      variantAnswers: z.number().int().nonnegative(),
+      originalCorrectRate: z.number().min(0).max(1).nullable(),
+      variantCorrectRate: z.number().min(0).max(1).nullable(),
+      weeklyReportViews: z.number().int().nonnegative(),
+      weeklyReportActions: z.number().int().nonnegative(),
+    }).strict(),
   }).strict(),
 }).strict()
 
@@ -479,7 +522,17 @@ export const AdminContentIndexResponseSchema = z.object({
   }).strict(),
 }).strict()
 
+export const AdminContentReleaseSnapshotResponseSchema = z.object({
+  data: AdminContentReleaseSchema.extend({
+    bundle: TrainingContentBundleSchema,
+  }).strict(),
+}).strict()
+
 export const AdminDraftResponseSchema = z.object({ data: AdminContentDraftSchema }).strict()
+
+export const AdminDraftDeleteResponseSchema = z.object({
+  data: z.object({ id: z.uuid() }).strict(),
+}).strict()
 
 export const AdminDraftValidationResponseSchema = z.object({
   data: z.object({
@@ -532,8 +585,10 @@ export type AiEvaluation = z.infer<typeof AiEvaluationSchema>
 export type AiEvaluationCreateRequest = z.infer<typeof AiEvaluationCreateRequestSchema>
 export type AdminAiModelConfig = z.infer<typeof AdminAiModelConfigSchema>
 export type AdminAiMetrics = z.infer<typeof AdminAiMetricsResponseSchema>['data']
+export type AdminReviewVariantGenerate = z.infer<typeof AdminReviewVariantGenerateResponseSchema>['data']
 export type AdminContentDraft = z.infer<typeof AdminContentDraftSchema>
 export type AdminContentRelease = z.infer<typeof AdminContentReleaseSchema>
+export type AdminContentReleaseSnapshot = z.infer<typeof AdminContentReleaseSnapshotResponseSchema>['data']
 export type AdminFeedback = z.infer<typeof AdminFeedbackSchema>
 export type AdminMetrics = z.infer<typeof AdminMetricsResponseSchema>['data']
 export type AdminContentIndex = z.infer<typeof AdminContentIndexResponseSchema>['data']

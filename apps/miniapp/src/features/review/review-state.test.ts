@@ -9,6 +9,7 @@ import {
   createReviewOverview,
   findChoiceCard,
   scheduleReviewAnswer,
+  resolveReviewQuestion,
   upsertReviewFromTraining,
   type ReviewItem,
 } from './review-state'
@@ -176,5 +177,24 @@ describe('review state', () => {
     expect(overview.dueBatch).toHaveLength(5)
     expect(overview.dueBatch[0].item.dueAt).toBe('2026-07-21T08:00:00.000Z')
     expect(overview.upcomingItems).toHaveLength(1)
+  })
+
+  it('首次使用变体并与原题稳定交替', () => {
+    const session = structuredClone(firstSession)
+    session.reviewVariants = [{
+      variantId: 'review-priority', title: '新的优先级协商',
+      context: '两个项目同时进入关键阶段，你只能在今天完成其中一个，需要向相关负责人说明限制并确认优先级。',
+      question: '你会如何协调？', prompt: '选择更清晰的一句话',
+      options: choiceCard.options.map((option, index) => ({ ...option, id: `variant-${index}` })),
+    }]
+    const item = upsertReviewFromTraining([], session, completedProgress(session.sessionId, session.contentVersion, wrongOption.id)).item as ReviewItem
+    const firstQuestion = resolveReviewQuestion({ item, session, choiceCard })
+    expect(firstQuestion.variantId).toBe('review-priority')
+    const recommended = firstQuestion.options.find((option) => option.rating === 'recommended')
+    const reviewed = scheduleReviewAnswer(item, session, recommended?.id ?? '', now, firstQuestion.variantId)
+    const secondQuestion = resolveReviewQuestion({ item: reviewed?.item as ReviewItem, session, choiceCard })
+    expect(secondQuestion.variantId).toBeNull()
+    const second = scheduleReviewAnswer(reviewed?.item as ReviewItem, session, correctOption.id, now, null)
+    expect(resolveReviewQuestion({ item: second?.item as ReviewItem, session, choiceCard }).variantId).toBe('review-priority')
   })
 })

@@ -71,6 +71,11 @@ export default function AiPage() {
             ['估算成本', `$${metrics.data.estimatedCostUsd.toFixed(4)}`], ['有帮助率', metrics.data.helpfulRate === null ? '-' : `${(metrics.data.helpfulRate * 100).toFixed(1)}%`],
           ].map(([title, value]) => <Col xs={12} md={8} key={title}><Card className="metric-card"><Statistic title={title} value={value} /></Card></Col>)}</Row>
           <Card title="模型调用分布"><Table size="small" pagination={false} rowKey="modelId" dataSource={metrics.data.models} columns={[{ title: '模型', dataIndex: 'modelId' }, { title: '调用数', dataIndex: 'count', width: 100 }]} /></Card>
+          <Card title="内容候选生成"><Row gutter={12}>
+            <Col span={8}><Statistic title="生成次数" value={metrics.data.contentGeneration.total} /></Col>
+            <Col span={8}><Statistic title="成功 / 失败" value={`${metrics.data.contentGeneration.succeeded} / ${metrics.data.contentGeneration.failed}`} /></Col>
+            <Col span={8}><Statistic title="估算成本" value={`$${metrics.data.contentGeneration.estimatedCostUsd.toFixed(4)}`} /></Col>
+          </Row></Card>
         </>}
       </Space></Col>
     </Row>

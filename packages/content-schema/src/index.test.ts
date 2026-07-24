@@ -148,6 +148,22 @@ describe('TrainingSessionSchema', () => {
 
     expect(TrainingSessionSchema.safeParse(session).success).toBe(false)
   })
+
+  it('校验复习变体唯一性和推荐选项', () => {
+    const session = structuredClone(validSession) as Record<string, any>
+    const variant = {
+      variantId: 'review-one', title: '新的复习情景',
+      context: '这是一个与原训练目标一致但背景不同的复习情景，包含足够信息帮助用户重新判断表达方式。',
+      question: '你会如何回应？', prompt: '选择一句更合适的表达',
+      options: structuredClone(session.cards[1].options),
+    }
+    session.reviewVariants = [variant]
+    expect(TrainingSessionSchema.safeParse(session).success).toBe(true)
+    session.reviewVariants = [variant, variant]
+    expect(TrainingSessionSchema.safeParse(session).success).toBe(false)
+    session.reviewVariants = [{ ...variant, options: variant.options.map((option: any) => ({ ...option, rating: 'risky' })) }]
+    expect(TrainingSessionSchema.safeParse(session).success).toBe(false)
+  })
 })
 
 describe('TrainingContentBundleSchema', () => {

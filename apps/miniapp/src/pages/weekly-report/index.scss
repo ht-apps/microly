@@ -1,0 +1,121 @@
+.weekly-report-page {
+  min-height: 100vh;
+  padding: 32px;
+  box-sizing: border-box;
+  color: #20243a;
+  background: #fbf8f2;
+}
+
+.weekly-report-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 8px 30px;
+}
+
+.weekly-report-eyebrow,
+.weekly-report-card__label {
+  color: #5d58db;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.weekly-report-title {
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.weekly-report-body,
+.weekly-report-card__body,
+.weekly-report-empty__body {
+  color: #7c8192;
+  font-size: 27px;
+  line-height: 1.65;
+}
+
+.weekly-report-weeks {
+  width: 100%;
+  margin-bottom: 26px;
+  white-space: nowrap;
+}
+
+.weekly-report-weeks__inner {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.weekly-report-week {
+  width: auto;
+  min-width: 120px;
+  height: 64px;
+  padding: 0 24px;
+  color: #777b8d;
+  font-size: 24px;
+  line-height: 64px;
+  background: #fff;
+  border-radius: 32px;
+}
+
+.weekly-report-week--active {
+  color: #fff;
+  background: #5d58db;
+}
+
+.weekly-report-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.weekly-report-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 26px 12px;
+  color: #85899a;
+  font-size: 22px;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #e7e4f5;
+  border-radius: 28px;
+}
+
+.weekly-report-stat__value {
+  color: #20243a;
+  font-size: 40px;
+  font-weight: 800;
+}
+
+.weekly-report-card,
+.weekly-report-action,
+.weekly-report-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 30px;
+  margin-bottom: 20px;
+  background: #fff;
+  border: 1px solid #e7e4f5;
+  border-radius: 30px;
+}
+
+.weekly-report-card__title,
+.weekly-report-empty__title {
+  font-size: 31px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.weekly-report-empty {
+  padding: 70px 34px;
+  text-align: center;
+}
+
+.weekly-report-primary {
+  margin: 8px 0 0;
+  color: #fff;
+  background: #5d58db;
+  border-radius: 24px;
+}

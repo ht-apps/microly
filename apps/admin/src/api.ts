@@ -1,5 +1,7 @@
 import {
   AdminContentIndexResponseSchema,
+  AdminContentReleaseSnapshotResponseSchema,
+  AdminDraftDeleteResponseSchema,
   AdminDraftResponseSchema,
   AdminDraftValidationResponseSchema,
   AdminFeedbackListResponseSchema,
@@ -10,14 +12,17 @@ import {
   AdminPublishResponseSchema,
   AdminSessionResponseSchema,
   AdminWithdrawResponseSchema,
+  AdminReviewVariantGenerateResponseSchema,
   type AdminContentDraft,
   type AdminContentIndex,
+  type AdminContentReleaseSnapshot,
   type AdminDraftValidation,
   type AdminFeedback,
   type AdminFeedbackList,
   type AdminMetrics,
   type AdminAiModelConfig,
   type AdminAiMetrics,
+  type AdminReviewVariantGenerate,
 } from '@microly/api-contract'
 
 const TOKEN_KEY = 'microly:admin-token'
@@ -85,6 +90,9 @@ export const adminApi = {
   getContentIndex: (token: string) => adminRequest<AdminContentIndex>(
     '/v1/admin/content/releases', token, { schema: AdminContentIndexResponseSchema },
   ),
+  getRelease: (token: string, version: number) => adminRequest<AdminContentReleaseSnapshot>(
+    `/v1/admin/content/releases/${version}`, token, { schema: AdminContentReleaseSnapshotResponseSchema },
+  ),
   getDraft: (token: string, id: string) => adminRequest<AdminContentDraft>(
     `/v1/admin/content/drafts/${encodeURIComponent(id)}`, token, { schema: AdminDraftResponseSchema },
   ),
@@ -95,9 +103,21 @@ export const adminApi = {
     `/v1/admin/content/drafts/${encodeURIComponent(id)}`, token,
     { ...json('PUT', { revision, bundle }), schema: AdminDraftResponseSchema },
   ),
+  deleteDraft: (token: string, id: string, revision: number) => adminRequest<{ id: string }>(
+    `/v1/admin/content/drafts/${encodeURIComponent(id)}`, token,
+    { ...json('DELETE', { revision }), schema: AdminDraftDeleteResponseSchema },
+  ),
+  restoreDraft: (token: string, id: string, revision: number) => adminRequest<AdminContentDraft>(
+    `/v1/admin/content/drafts/${encodeURIComponent(id)}/restore`, token,
+    { ...json('POST', { revision }), schema: AdminDraftResponseSchema },
+  ),
   validateDraft: (token: string, id: string) => adminRequest<AdminDraftValidation>(
     `/v1/admin/content/drafts/${encodeURIComponent(id)}/validate`, token,
     { ...json('POST'), schema: AdminDraftValidationResponseSchema },
+  ),
+  generateReviewVariants: (token: string, id: string, sessionId: string, revision: number, count = 3) => adminRequest<AdminReviewVariantGenerate>(
+    `/v1/admin/content/drafts/${encodeURIComponent(id)}/sessions/${encodeURIComponent(sessionId)}/review-variants/generate`, token,
+    { ...json('POST', { revision, count }), schema: AdminReviewVariantGenerateResponseSchema },
   ),
   publishDraft: (token: string, id: string, revision: number, reason: string) => adminRequest(
     `/v1/admin/content/drafts/${encodeURIComponent(id)}/publish`, token,

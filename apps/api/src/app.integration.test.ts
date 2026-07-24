@@ -14,6 +14,7 @@ if (!databaseUrl.includes('microly_test')) {
 }
 
 const database = createDatabase(databaseUrl)
+let reviewGenerationMaxTokens = 0
 const app = createApp({
   databaseUrl,
   admin: { token: 'admin-token-with-at-least-32-characters', origins: ['http://localhost:5173'] },
@@ -31,6 +32,23 @@ const app = createApp({
       usage: { promptTokens: 100, cacheHitTokens: 20, cacheMissTokens: 80, completionTokens: 50 },
       formatRetries: 0,
     }),
+    generateReviewVariants: async ({ session, count, config }) => {
+      reviewGenerationMaxTokens = config.maxTokens
+      const choice = session.cards.find((card) => card.type === 'choice')
+      if (!choice) throw new Error('missing choice')
+      return {
+        value: { candidates: Array.from({ length: count }, (_, candidateIndex) => ({
+          variantId: `generated-review-${candidateIndex + 1}`,
+          title: `复习候选情景 ${candidateIndex + 1}`,
+          context: `这是第 ${candidateIndex + 1} 个经过匿名化处理的职场复习情景，包含新的协作背景、现实限制和需要确认的下一步安排。`,
+          question: '你会如何回应？', prompt: '选择一句更合适的表达',
+          options: choice.options.map((option, optionIndex) => ({ ...option, id: `generated-${candidateIndex + 1}-${optionIndex + 1}`, text: `${option.text}（变体 ${candidateIndex + 1}）` })),
+        })) },
+        modelId: config.modelId,
+        usage: { promptTokens: 120, cacheHitTokens: 0, cacheMissTokens: 120, completionTokens: 200 },
+        formatRetries: 0,
+      }
+    },
   },
 })
 let authorization = ''
@@ -215,9 +233,26 @@ describe('network MVP API', () => {
     const session = await app.inject({ method: 'GET', url: '/v1/admin/session', headers: { authorization: adminAuthorization } })
     expect(session.statusCode).toBe(200)
 
+    const releasePreview = await app.inject({ method: 'GET', url: '/v1/admin/content/releases/1', headers: { authorization: adminAuthorization } })
+    expect(releasePreview.statusCode).toBe(200)
+    expect(releasePreview.json().data.bundle.releaseVersion).toBe(1)
+    expect(releasePreview.json().data.sessionCount).toBe(10)
+    const missingRelease = await app.inject({ method: 'GET', url: '/v1/admin/content/releases/9999', headers: { authorization: adminAuthorization } })
+    expect(missingRelease.statusCode).toBe(404)
+
     const created = await app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: {} })
     expect(created.statusCode).toBe(201)
     const draft = created.json().data
+    const generated = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/sessions/boundary-decline-001/review-variants/generate`,
+      headers: { authorization: adminAuthorization }, payload: { revision: draft.revision, count: 2 },
+    })
+    expect(generated.statusCode, generated.body).toBe(200)
+    expect(generated.json().data.candidates).toHaveLength(2)
+    expect(reviewGenerationMaxTokens).toBeGreaterThanOrEqual(1200)
+    const unchangedDraft = await app.inject({ method: 'GET', url: `/v1/admin/content/drafts/${draft.id}`, headers: { authorization: adminAuthorization } })
+    expect(unchangedDraft.json().data.bundle.sessions['boundary-decline-001'].reviewVariants ?? []).toHaveLength(0)
+    expect((await database.pool.query("SELECT count(*)::int count FROM admin_ai_generation_runs WHERE operation='review_variants'")).rows[0].count).toBe(1)
     draft.bundle.sessions['boundary-decline-001'].title = '说明边界并协商优先级'
     const saved = await app.inject({
       method: 'PUT', url: `/v1/admin/content/drafts/${draft.id}`, headers: { authorization: adminAuthorization },
@@ -241,6 +276,13 @@ describe('network MVP API', () => {
     })
     expect(published.statusCode).toBe(201)
     expect(published.json().data.releaseVersion).toBe(2)
+    expect(Object.keys(published.json().data).sort()).toEqual(['checksum', 'releaseVersion'])
+    const publishedRetry = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/publish`, headers: { authorization: adminAuthorization },
+      payload: { revision: 2, reason: '验证内容发布闭环' },
+    })
+    expect(publishedRetry.statusCode).toBe(200)
+    expect(publishedRetry.json().data).toEqual(published.json().data)
     const releases = await app.inject({ method: 'GET', url: '/v1/admin/content/releases', headers: { authorization: adminAuthorization } })
     expect(releases.statusCode).toBe(200)
     expect(releases.json().data.releases[0].sessionCount).toBe(10)
@@ -248,6 +290,38 @@ describe('network MVP API', () => {
     const rollback = await app.inject({ method: 'POST', url: '/v1/admin/content/releases/1/rollback-draft', headers: { authorization: adminAuthorization } })
     expect(rollback.statusCode).toBe(201)
     expect(rollback.json().data.baseReleaseVersion).toBe(1)
+    const recoverable = await app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: { baseReleaseVersion: 1 } })
+    const recoverableDraft = recoverable.json().data
+    recoverableDraft.bundle.library.title = '等待恢复的临时标题'
+    const recoverableSaved = await app.inject({
+      method: 'PUT', url: `/v1/admin/content/drafts/${recoverableDraft.id}`,
+      headers: { authorization: adminAuthorization }, payload: { revision: 1, bundle: recoverableDraft.bundle },
+    })
+    const restored = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${recoverableDraft.id}/restore`,
+      headers: { authorization: adminAuthorization }, payload: { revision: 2 },
+    })
+    expect(restored.statusCode).toBe(200)
+    expect(restored.json().data.status).toBe('draft')
+    expect(restored.json().data.revision).toBe(3)
+    expect(restored.json().data.bundle.library.title).toBe(releasePreview.json().data.bundle.library.title)
+    expect(recoverableSaved.json().data.bundle.library.title).toBe('等待恢复的临时标题')
+    const deleted = await app.inject({
+      method: 'DELETE', url: `/v1/admin/content/drafts/${recoverableDraft.id}`,
+      headers: { authorization: adminAuthorization }, payload: { revision: 3 },
+    })
+    expect(deleted.statusCode).toBe(200)
+    expect(deleted.json().data.id).toBe(recoverableDraft.id)
+    const deletedDraft = await app.inject({ method: 'GET', url: `/v1/admin/content/drafts/${recoverableDraft.id}`, headers: { authorization: adminAuthorization } })
+    expect(deletedDraft.statusCode).toBe(404)
+    const restoreDeleted = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${recoverableDraft.id}/restore`,
+      headers: { authorization: adminAuthorization }, payload: { revision: 3 },
+    })
+    expect(restoreDeleted.statusCode).toBe(404)
+    const draftStateAudits = await database.pool.query(`SELECT action FROM admin_audit_logs
+      WHERE target_id = $1 AND action IN ('content.draft.delete', 'content.draft.restore') ORDER BY created_at`, [recoverableDraft.id])
+    expect(draftStateAudits.rows.map((row) => row.action)).toEqual(['content.draft.restore', 'content.draft.delete'])
     const withdrawn = await app.inject({
       method: 'POST', url: '/v1/admin/content/current/sessions/boundary-priority-002/withdraw',
       headers: { authorization: adminAuthorization }, payload: { confirmation: 'WITHDRAW', reason: '集成测试紧急下架' },

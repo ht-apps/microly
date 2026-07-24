@@ -54,6 +54,7 @@ export default function Index() {
 
   const openCourse = () => Taro.switchTab({ url: '/pages/course/index' })
   const openReviews = () => Taro.navigateTo({ url: '/pages/review/index' })
+  const openWeeklyReport = () => Taro.navigateTo({ url: '/pages/weekly-report/index' })
 
   const openTraining = async () => {
     const item = snapshot.overview.activeItem
@@ -296,7 +297,7 @@ export default function Index() {
         </View>
       )}
 
-      <View className='week-card'>
+      <View className='week-card' onClick={openWeeklyReport}>
         <View className='week-card__topline'>
           <View>
             <Text className='week-card__label'>本周学习</Text>
@@ -321,6 +322,7 @@ export default function Index() {
         <Text className='week-card__hint'>
           完成一组训练，或同一天完成 2 道到期复习，即记为有效学习日。
         </Text>
+        <Text className='week-card__hint'>查看学习周报 ›</Text>
       </View>
 
       {progressChapter && (

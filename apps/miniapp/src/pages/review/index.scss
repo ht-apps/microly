@@ -384,8 +384,40 @@
   line-height: 60px;
 }
 
-.ai-history__item { position: relative; margin-top: 18px; padding: 22px; background: #f5f4ff; border-radius: 20px; }
-.ai-history__session { color: #34394a; font-size: 24px; font-weight: 700; }
-.ai-history__status { float: right; color: #5b5bd6; font-size: 19px; font-weight: 700; }
-.ai-history__summary { display: block; margin-top: 14px; color: #4f5363; font-size: 22px; font-weight: 700; line-height: 1.55; }
-.ai-history__dimension { display: block; margin-top: 10px; color: #727686; font-size: 20px; line-height: 1.5; }
+.ai-history__item {
+  position: relative;
+  padding: 22px;
+  margin-top: 18px;
+  background: #f5f4ff;
+  border-radius: 20px;
+}
+
+.ai-history__session {
+  color: #34394a;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.ai-history__status {
+  float: right;
+  color: #5b5bd6;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.ai-history__summary {
+  display: block;
+  margin-top: 14px;
+  color: #4f5363;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+.ai-history__dimension {
+  display: block;
+  margin-top: 10px;
+  color: #727686;
+  font-size: 20px;
+  line-height: 1.5;
+}

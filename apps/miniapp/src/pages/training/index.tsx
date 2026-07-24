@@ -20,6 +20,7 @@ import {
 } from '../../features/ai/ai-client'
 import type { AiAccessState } from '../../features/ai/ai-access'
 import { AI_FOREGROUND_WAIT_MS, remainingAiWaitSeconds } from '../../features/ai/ai-wait'
+import { writeCachedAiEvaluations } from '../../features/ai/ai-history-storage'
 import { createTrainingCompletedEvent } from '../../features/activity/activity-state'
 import { recordLearningActivity } from '../../features/activity/activity-storage'
 import {
@@ -147,6 +148,7 @@ export default function TrainingPage() {
       void getAiEvaluation(evaluation.id).then((next) => {
         if (!next) return
         setAiEvaluation(next)
+        writeCachedAiEvaluations([next])
         if (!['queued', 'processing'].includes(next.status)) {
           setAiBusy(false)
           setAiWaitUntil(null)
@@ -304,6 +306,7 @@ export default function TrainingPage() {
     const response = await submitAiEvaluation(session, card, progress)
     if (response.evaluation) {
       setAiEvaluation(response.evaluation)
+      writeCachedAiEvaluations([response.evaluation])
       trackEvent('ai_evaluation', { sessionId: session.sessionId, status: 'submitted' })
       void flushAnalyticsOutbox()
       if (['queued', 'processing'].includes(response.evaluation.status)) {

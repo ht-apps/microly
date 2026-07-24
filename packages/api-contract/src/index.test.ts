@@ -2,13 +2,18 @@ import { describe, expect, it } from 'vitest'
 
 import {
   AdminContentIndexResponseSchema,
+  AdminContentReleaseSnapshotResponseSchema,
+  AdminDraftDeleteResponseSchema,
+  AdminDraftStateRequestSchema,
   AdminDraftValidationResponseSchema,
   AdminFeedbackListResponseSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminMetricsResponseSchema,
+  AdminReviewVariantGenerateResponseSchema,
   AiEvaluationCreateRequestSchema,
   AiEvaluationResultSchema,
   AdminPublishRequestSchema,
+  AdminPublishResponseSchema,
   AnalyticsBatchRequestSchema,
   SyncRequestSchema,
   TrainingCompletionSchema,
@@ -69,6 +74,9 @@ describe('API contract', () => {
   it('严格校验管理写入与反馈状态', () => {
     expect(AdminPublishRequestSchema.safeParse({ revision: 2, reason: '修正训练反馈' }).success).toBe(true)
     expect(AdminPublishRequestSchema.safeParse({ revision: 2, reason: 'ok', token: 'secret' }).success).toBe(false)
+    const published = { data: { releaseVersion: 2, checksum: 'a'.repeat(64) } }
+    expect(AdminPublishResponseSchema.safeParse(published).success).toBe(true)
+    expect(AdminPublishResponseSchema.safeParse({ data: { ...published.data, bundle: {} } }).success).toBe(false)
     expect(AdminFeedbackUpdateRequestSchema.safeParse({ status: 'resolved', internalNote: '已处理' }).success).toBe(true)
     expect(AdminFeedbackUpdateRequestSchema.safeParse({ status: 'unknown' }).success).toBe(false)
   })
@@ -80,13 +88,32 @@ describe('API contract', () => {
         funnel: ['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success'].map((name, index) => ({ name, accounts: 6 - index, conversionRate: index ? 0.8 : null })),
         daily: [], sessions: [],
         feedback: { total: 0, byStatus: { new: 0, in_progress: 0, resolved: 0, dismissed: 0 }, byCategory: {} },
+        review: { originalAnswers: 0, variantAnswers: 0, originalCorrectRate: null, variantCorrectRate: null, weeklyReportViews: 0, weeklyReportActions: 0 },
       },
     }
     expect(AdminMetricsResponseSchema.safeParse(value).success).toBe(true)
     expect(AdminMetricsResponseSchema.safeParse({ ...value, data: { ...value.data, accountId: '11111111-1111-4111-8111-111111111111' } }).success).toBe(false)
   })
 
+  it('严格校验后台复习变体候选', () => {
+    const candidate = {
+      variantId: 'variant-one', title: '新的协作情景',
+      context: '这是一个用于复习的全新职场协作情景，包含清楚的关系、目标、限制和需要作出的表达决定。',
+      question: '你会如何回应？', prompt: '选择更合适的一句话',
+      options: ['risky', 'not_recommended', 'recommended'].map((rating, index) => ({
+        id: `variant-option-${index}`, text: `候选表达 ${index + 1}`, rating,
+        feedback: { interpretation: '对方可能这样理解。', strength: '体现了部分信息。', risk: '仍有需要注意的风险。' },
+      })),
+    }
+    expect(AdminReviewVariantGenerateResponseSchema.safeParse({ data: {
+      candidates: [candidate], model: { modelId: 'deepseek-v4-flash', configRevision: 1, promptVersion: 'review-variant-v1' }, warnings: [],
+    } }).success).toBe(true)
+  })
+
   it('严格校验后台列表和草稿校验响应', () => {
+    expect(AdminDraftStateRequestSchema.safeParse({ revision: 2 }).success).toBe(true)
+    expect(AdminDraftStateRequestSchema.safeParse({ revision: 2, status: 'published' }).success).toBe(false)
+    expect(AdminDraftDeleteResponseSchema.safeParse({ data: { id: '11111111-1111-4111-8111-111111111111' } }).success).toBe(true)
     expect(AdminContentIndexResponseSchema.safeParse({ data: {
       currentVersion: 1, releases: [], drafts: [],
     } }).success).toBe(true)
@@ -101,6 +128,18 @@ describe('API contract', () => {
     expect(AdminFeedbackListResponseSchema.safeParse({ data: {
       items: [], total: 0, page: 1, pageSize: 20,
     } }).success).toBe(true)
+  })
+
+  it('发布历史预览拒绝无效内容快照', () => {
+    expect(AdminContentReleaseSnapshotResponseSchema.safeParse({ data: {
+      releaseVersion: 1,
+      checksum: 'a'.repeat(64),
+      createdFromVersion: null,
+      releaseReason: '初始发布',
+      publishedAt: '2026-07-23T10:00:00.000Z',
+      sessionCount: 0,
+      bundle: {},
+    } }).success).toBe(false)
   })
 
   it('严格校验 AI 原文请求和结构化安全结果', () => {

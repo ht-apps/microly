@@ -3,28 +3,57 @@ import { createHash, timingSafeEqual } from 'node:crypto'
 import {
   AdminAiConfigUpdateRequestSchema,
   AdminDraftCreateRequestSchema,
+  AdminDraftStateRequestSchema,
   AdminDraftUpdateRequestSchema,
   AdminFeedbackStatusSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminPublishRequestSchema,
+  AdminReviewVariantGenerateRequestSchema,
   AdminWithdrawRequestSchema,
 } from '@microly/api-contract'
-import { TrainingContentBundleSchema, type TrainingContentBundle } from '@microly/content-schema'
+import { ReviewVariantSchema, TrainingContentBundleSchema, type TrainingContentBundle } from '@microly/content-schema'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
 import type { DatabaseContext } from './db/client.js'
 import { checksumBundle } from './db/seed.js'
-import type { AiProvider } from './ai.js'
+import { activeConfig, AiProviderValidationError, type AiProvider } from './ai.js'
 
 const feedbackCategories = ['content_error', 'product_suggestion', 'inappropriate_content'] as const
 const funnelNames = ['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success'] as const
 
 type AdminOptions = { token: string; origins: string[] }
 type ValidationIssue = { path: string; message: string; severity: 'error' | 'warning' }
+const highRiskPattern = /(?:法律争议|劳动仲裁|安全事故|自杀|伤害|报警|违法|医疗诊断|公司机密|商业秘密)/u
+
+function reviewVariantText(value: { title: string; context: string; question: string; prompt: string; options: Array<{ text: string }> }) {
+  return [value.title, value.context, value.question, value.prompt, ...value.options.map((option) => option.text)].join(' ')
+}
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string) {
   return reply.status(status).send({ error: { code, message } })
+}
+
+function generationFailure(cause: unknown) {
+  const name = cause instanceof Error ? cause.name : ''
+  const message = cause instanceof Error ? cause.message : ''
+  if (name === 'TimeoutError' || name === 'AbortError' || /(?:timeout|aborted)/iu.test(message)) {
+    return { status: 504, code: 'ai_generation_timeout', failureCode: 'timeout', message: '复习变体生成超时，请重试或减少生成数量。' }
+  }
+  if (cause instanceof SyntaxError) {
+    return { status: 502, code: 'ai_generation_format_invalid', failureCode: 'invalid_json', message: '模型返回内容不完整，请重试。' }
+  }
+  if (cause instanceof AiProviderValidationError) {
+    const paths = [...new Set(cause.issuePaths)].slice(0, 5).join('、')
+    return { status: 502, code: 'ai_generation_format_invalid', failureCode: 'invalid_schema', message: `模型返回字段未通过校验：${paths}。` }
+  }
+  if (cause instanceof z.ZodError || /(?:invalid_(?:review_variants|output|dimensions)|deepseek_empty_output)/u.test(message)) {
+    return { status: 502, code: 'ai_generation_format_invalid', failureCode: 'invalid_schema', message: '模型返回内容未通过格式校验，请重试。' }
+  }
+  if (message === 'high_risk_candidate') {
+    return { status: 422, code: 'ai_generation_content_rejected', failureCode: 'high_risk', message: '候选内容未通过安全校验，请重新生成。' }
+  }
+  return { status: 502, code: 'ai_generation_failed', failureCode: 'provider_failed', message: '复习变体生成失败，请稍后重试。' }
 }
 
 function tokenMatches(expected: string, actual: string) {
@@ -59,11 +88,18 @@ function contentWarnings(bundle: TrainingContentBundle): ValidationIssue[] {
     if (existing) warnings.push({ path: `sessions.${sessionId}.title`, message: `训练标题与 ${existing} 重复。`, severity: 'warning' })
     else sessionTitles.set(session.title, sessionId)
     const choice = session.cards.find((card) => card.type === 'choice')
+    if (!session.reviewVariants.length) warnings.push({ path: `sessions.${sessionId}.reviewVariants`, message: '尚未配置复习变体，将回退使用原题。', severity: 'warning' })
     if (choice) {
       const texts = new Set<string>()
       choice.options.forEach((option, index) => {
         if (texts.has(option.text)) warnings.push({ path: `sessions.${sessionId}.cards.1.options.${index}.text`, message: '选项文本重复。', severity: 'warning' })
         texts.add(option.text)
+      })
+      session.reviewVariants.forEach((variant, variantIndex) => {
+        if (variant.title === session.title) warnings.push({ path: `sessions.${sessionId}.reviewVariants.${variantIndex}.title`, message: '复习变体标题与原训练相同。', severity: 'warning' })
+        variant.options.forEach((option, optionIndex) => {
+          if (choice.options.some((source) => source.text === option.text)) warnings.push({ path: `sessions.${sessionId}.reviewVariants.${variantIndex}.options.${optionIndex}.text`, message: '变体选项与原题选项重复。', severity: 'warning' })
+        })
       })
     }
   })
@@ -85,6 +121,9 @@ export function validateContentBundle(value: unknown) {
   Object.entries(parsed.data.sessions).forEach(([id, session]) => {
     if (!referencedSessions.has(id)) issues.push({ path: `sessions.${id}`, message: '训练未被任何章节引用。', severity: 'error' })
     if (session.riskLevel === 'high') issues.push({ path: `sessions.${id}.riskLevel`, message: '高风险训练不能在 MVP 中发布。', severity: 'error' })
+    session.reviewVariants.forEach((variant, index) => {
+      if (highRiskPattern.test(reviewVariantText(variant))) issues.push({ path: `sessions.${id}.reviewVariants.${index}`, message: '复习变体包含当前版本不允许发布的高风险内容。', severity: 'error' })
+    })
   })
   issues.push(...contentWarnings(parsed.data))
   return { valid: !issues.some((issue) => issue.severity === 'error'), issues, bundle: parsed.data }
@@ -139,6 +178,52 @@ async function loadReleaseBundles(database: DatabaseContext) {
   })
 }
 
+async function deleteDraft(database: DatabaseContext, id: string, revision: number) {
+  const client = await database.pool.connect()
+  try {
+    await client.query('BEGIN')
+    const current = await client.query('SELECT revision, status FROM content_drafts WHERE id = $1 FOR UPDATE', [id])
+    if (!current.rows[0]) { await client.query('ROLLBACK'); return { error: 'not_found' as const } }
+    if (current.rows[0].revision !== revision) { await client.query('ROLLBACK'); return { error: 'conflict' as const } }
+    if (current.rows[0].status !== 'draft') { await client.query('ROLLBACK'); return { error: 'invalid_state' as const } }
+    await client.query(`INSERT INTO admin_audit_logs (action, target_type, target_id, metadata)
+      VALUES ('content.draft.delete', 'draft', $1, $2::jsonb)`, [id, JSON.stringify({ revision })])
+    await client.query('DELETE FROM content_drafts WHERE id = $1', [id])
+    await client.query('COMMIT')
+    return { id }
+  } catch (cause) {
+    await client.query('ROLLBACK')
+    throw cause
+  } finally {
+    client.release()
+  }
+}
+
+async function restoreDraftBase(database: DatabaseContext, id: string, revision: number) {
+  const client = await database.pool.connect()
+  try {
+    await client.query('BEGIN')
+    const current = await client.query('SELECT * FROM content_drafts WHERE id = $1 FOR UPDATE', [id])
+    const draft = current.rows[0]
+    if (!draft) { await client.query('ROLLBACK'); return { error: 'not_found' as const } }
+    if (draft.revision !== revision) { await client.query('ROLLBACK'); return { error: 'conflict' as const } }
+    if (draft.status !== 'draft') { await client.query('ROLLBACK'); return { error: 'invalid_state' as const } }
+    const release = await client.query('SELECT bundle FROM content_releases WHERE release_version = $1', [draft.base_release_version])
+    if (!release.rows[0]) { await client.query('ROLLBACK'); return { error: 'release_not_found' as const } }
+    const restored = await client.query(`UPDATE content_drafts SET bundle = $2::jsonb,
+      revision = revision + 1, updated_at = now() WHERE id = $1 RETURNING *`, [id, JSON.stringify(release.rows[0].bundle)])
+    await client.query(`INSERT INTO admin_audit_logs (action, target_type, target_id, metadata)
+      VALUES ('content.draft.restore', 'draft', $1, $2::jsonb)`, [id, JSON.stringify({ baseReleaseVersion: draft.base_release_version })])
+    await client.query('COMMIT')
+    return { draft: restored.rows[0] as Record<string, unknown> }
+  } catch (cause) {
+    await client.query('ROLLBACK')
+    throw cause
+  } finally {
+    client.release()
+  }
+}
+
 async function publishDraft(database: DatabaseContext, draftId: string, revision: number, reason: string) {
   const client = await database.pool.connect()
   try {
@@ -147,6 +232,18 @@ async function publishDraft(database: DatabaseContext, draftId: string, revision
     const draftResult = await client.query('SELECT * FROM content_drafts WHERE id = $1 FOR UPDATE', [draftId])
     const draft = draftResult.rows[0]
     if (!draft) { await client.query('ROLLBACK'); return { error: 'not_found' as const } }
+    if (draft.status === 'published' && draft.published_release_version && draft.revision === revision + 1) {
+      const existing = await client.query('SELECT release_version, checksum, bundle FROM content_releases WHERE release_version = $1', [draft.published_release_version])
+      if (existing.rows[0]) {
+        await client.query('ROLLBACK')
+        return {
+          releaseVersion: existing.rows[0].release_version as number,
+          checksum: existing.rows[0].checksum as string,
+          bundle: existing.rows[0].bundle as TrainingContentBundle,
+          alreadyPublished: true,
+        }
+      }
+    }
     if (draft.status !== 'draft') { await client.query('ROLLBACK'); return { error: 'not_editable' as const } }
     if (draft.revision !== revision) { await client.query('ROLLBACK'); return { error: 'conflict' as const } }
     const validation = validateContentBundle(draft.bundle)
@@ -167,7 +264,7 @@ async function publishDraft(database: DatabaseContext, draftId: string, revision
     await client.query(`INSERT INTO admin_audit_logs (action, target_type, target_id, reason, metadata)
       VALUES ('content.publish', 'release', $1, $2, $3::jsonb)`, [String(nextVersion), reason, JSON.stringify({ draftId })])
     await client.query('COMMIT')
-    return { releaseVersion: nextVersion, checksum, bundle }
+    return { releaseVersion: nextVersion, checksum, bundle, alreadyPublished: false }
   } catch (cause) {
     await client.query('ROLLBACK')
     throw cause
@@ -183,7 +280,7 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       reply.header('Access-Control-Allow-Origin', origin)
       reply.header('Vary', 'Origin')
       reply.header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
-      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, OPTIONS')
+      reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
     }
     if (request.method === 'OPTIONS') return reply.status(204).send()
   })
@@ -216,6 +313,26 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
           : 0,
       })),
       drafts: drafts.rows.map(draftResponse),
+    } })
+  })
+
+  app.get('/v1/admin/content/releases/:version', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { version } = z.object({ version: z.coerce.number().int().positive() }).parse(request.params)
+    const result = await database.pool.query(`SELECT release_version, checksum, created_from_version,
+      release_reason, published_at, bundle FROM content_releases WHERE release_version = $1`, [version])
+    const row = result.rows[0]
+    if (!row) return sendError(reply, 404, 'release_not_found', '发布版本不存在。')
+    const bundle = TrainingContentBundleSchema.safeParse(row.bundle)
+    if (!bundle.success) return sendError(reply, 500, 'release_invalid', '历史发布内容无法读取。')
+    return reply.send({ data: {
+      releaseVersion: row.release_version,
+      checksum: row.checksum,
+      createdFromVersion: row.created_from_version,
+      releaseReason: row.release_reason,
+      publishedAt: row.published_at.toISOString(),
+      sessionCount: Object.keys(bundle.data.sessions).length,
+      bundle: bundle.data,
     } })
   })
 
@@ -258,6 +375,33 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
     return reply.send({ data: draftResponse(result.rows[0]) })
   })
 
+  app.delete('/v1/admin/content/drafts/:id', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { id } = z.object({ id: z.uuid() }).parse(request.params)
+    const input = AdminDraftStateRequestSchema.parse(request.body)
+    const result = await deleteDraft(database, id, input.revision)
+    if ('error' in result) {
+      if (result.error === 'not_found') return sendError(reply, 404, 'draft_not_found', '草稿不存在。')
+      if (result.error === 'conflict') return sendError(reply, 409, 'draft_conflict', '草稿已更新，请重新加载。')
+      return sendError(reply, 409, 'draft_not_deletable', '只有未发布草稿可以删除。')
+    }
+    return reply.send({ data: { id: result.id } })
+  })
+
+  app.post('/v1/admin/content/drafts/:id/restore', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { id } = z.object({ id: z.uuid() }).parse(request.params)
+    const input = AdminDraftStateRequestSchema.parse(request.body)
+    const result = await restoreDraftBase(database, id, input.revision)
+    if ('error' in result) {
+      if (result.error === 'not_found') return sendError(reply, 404, 'draft_not_found', '草稿不存在。')
+      if (result.error === 'conflict') return sendError(reply, 409, 'draft_conflict', '草稿已更新，请重新加载。')
+      if (result.error === 'release_not_found') return sendError(reply, 409, 'draft_base_not_found', '草稿的基础发布版本不存在。')
+      return sendError(reply, 409, 'draft_not_restorable', '只有未发布草稿可以恢复到基础版本。')
+    }
+    return reply.send({ data: draftResponse(result.draft) })
+  })
+
   app.post('/v1/admin/content/drafts/:id/validate', async (request, reply) => {
     if (!await authorizeAdmin(request, reply, admin)) return
     const { id } = z.object({ id: z.uuid() }).parse(request.params)
@@ -271,6 +415,48 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
     return reply.send({ data: { valid: validation.valid, issues: validation.issues, normalizedBundle } })
   })
 
+  app.post('/v1/admin/content/drafts/:id/sessions/:sessionId/review-variants/generate', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { id, sessionId } = z.object({ id: z.uuid(), sessionId: z.string().regex(/^[a-z0-9-]+$/) }).parse(request.params)
+    const input = AdminReviewVariantGenerateRequestSchema.parse(request.body)
+    if (!ai?.provider?.generateReviewVariants) return sendError(reply, 503, 'ai_not_configured', '尚未配置可用的 DeepSeek 内容生成服务。')
+    const draftResult = await database.pool.query('SELECT revision, status, bundle FROM content_drafts WHERE id=$1', [id])
+    const draft = draftResult.rows[0]
+    if (!draft) return sendError(reply, 404, 'draft_not_found', '草稿不存在。')
+    if (draft.status !== 'draft') return sendError(reply, 409, 'draft_not_editable', '已发布草稿不能生成候选。')
+    if (draft.revision !== input.revision) return sendError(reply, 409, 'draft_conflict', '草稿已更新，请重新加载。')
+    const bundle = TrainingContentBundleSchema.safeParse(draft.bundle)
+    const session = bundle.success ? bundle.data.sessions[sessionId] : null
+    if (!session) return sendError(reply, 422, 'invalid_content_reference', '请先修正草稿并选择有效训练。')
+    const config = await activeConfig(database)
+    if (!config) return sendError(reply, 503, 'ai_not_configured', '尚未启用 DeepSeek 模型。')
+    const started = Date.now()
+    try {
+      // Each candidate is generated and validated independently in parallel. A
+      // complete candidate still needs more output room than an AI evaluation.
+      const generationConfig = { ...config, maxTokens: Math.max(config.maxTokens, 1200) }
+      const generated = await ai.provider.generateReviewVariants({ session, count: input.count, config: generationConfig, signal: AbortSignal.timeout(config.timeoutMs) })
+      const candidates = z.object({ candidates: z.array(ReviewVariantSchema).length(input.count) }).parse(generated.value).candidates
+      if (candidates.some((candidate) => highRiskPattern.test(reviewVariantText(candidate)))) throw new Error('high_risk_candidate')
+      const originalChoice = session.cards.find((card) => card.type === 'choice')
+      const warnings = candidates.flatMap((candidate) => originalChoice?.options.some((option) => candidate.options.some((item) => item.text === option.text)) ? [`${candidate.variantId} 包含与原题相同的选项文本。`] : [])
+      const usage = generated.usage
+      const cost = ((usage.cacheHitTokens * config.inputCacheHitPrice) + (usage.cacheMissTokens * config.inputCacheMissPrice) + (usage.completionTokens * config.outputPrice)) / 1_000_000
+      await database.pool.query(`INSERT INTO admin_ai_generation_runs
+        (operation,target_id,model_id,config_revision,prompt_version,status,prompt_tokens,completion_tokens,estimated_cost_usd,latency_ms,format_retries)
+        VALUES ('review_variants',$1,$2,$3,'review-variant-v1','succeeded',$4,$5,$6,$7,$8)`,
+      [sessionId, generated.modelId, config.revision, usage.promptTokens, usage.completionTokens, cost, Date.now() - started, generated.formatRetries])
+      return reply.send({ data: { candidates, model: { modelId: generated.modelId, configRevision: config.revision, promptVersion: 'review-variant-v1' }, warnings } })
+    } catch (cause) {
+      const failure = generationFailure(cause)
+      await database.pool.query(`INSERT INTO admin_ai_generation_runs
+        (operation,target_id,model_id,config_revision,prompt_version,status,latency_ms,failure_code)
+        VALUES ('review_variants',$1,$2,$3,'review-variant-v1','failed',$4,$5)`,
+      [sessionId, config.modelId, config.revision, Date.now() - started, failure.failureCode])
+      return sendError(reply, failure.status, failure.code, failure.message)
+    }
+  })
+
   app.post('/v1/admin/content/drafts/:id/publish', async (request, reply) => {
     if (!await authorizeAdmin(request, reply, admin)) return
     const { id } = z.object({ id: z.uuid() }).parse(request.params)
@@ -282,7 +468,10 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       if (result.error === 'not_editable') return sendError(reply, 409, 'draft_not_editable', '草稿已经发布。')
       return reply.status(422).send({ error: { code: 'content_invalid', message: '内容没有通过发布校验。', issues: result.issues } })
     }
-    return reply.status(201).send({ data: result })
+    return reply.status(result.alreadyPublished ? 200 : 201).send({ data: {
+      releaseVersion: result.releaseVersion,
+      checksum: result.checksum,
+    } })
   })
 
   app.post('/v1/admin/content/releases/:version/rollback-draft', async (request, reply) => {
@@ -395,7 +584,7 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       previous = accounts
       return { name, accounts, conversionRate }
     })
-    const [daily, sessions, feedbackStats] = await Promise.all([
+    const [daily, sessions, feedbackStats, reviewStats, reportStats] = await Promise.all([
       database.pool.query(`SELECT to_char(occurred_at AT TIME ZONE 'UTC', 'YYYY-MM-DD') date,
         count(*) FILTER (WHERE name='training_start')::int starts,
         count(*) FILTER (WHERE name='training_complete')::int completions
@@ -409,6 +598,15 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
         GROUP BY 1 ORDER BY completions DESC, starts DESC LIMIT 10`, [days]),
       database.pool.query(`SELECT status, category, count(*)::int count FROM feedback
         WHERE created_at >= now() - ($1::int * interval '1 day') GROUP BY status, category`, [days]),
+      database.pool.query(`SELECT
+        count(*) FILTER (WHERE value->>'type'='due_review_answered' AND coalesce(value->>'variantId','')='')::int original_answers,
+        count(*) FILTER (WHERE value->>'type'='due_review_answered' AND coalesce(value->>'variantId','')<>'')::int variant_answers,
+        avg(CASE WHEN value->>'type'='due_review_answered' AND coalesce(value->>'variantId','')='' AND value ? 'isCorrect' THEN (value->>'isCorrect')::boolean::int END) original_correct_rate,
+        avg(CASE WHEN value->>'type'='due_review_answered' AND coalesce(value->>'variantId','')<>'' AND value ? 'isCorrect' THEN (value->>'isCorrect')::boolean::int END) variant_correct_rate
+        FROM learning_activity_events WHERE occurred_at >= now() - ($1::int * interval '1 day')`, [days]),
+      database.pool.query(`SELECT count(*) FILTER (WHERE name='weekly_report_view')::int views,
+        count(*) FILTER (WHERE name='weekly_report_action')::int actions FROM analytics_events
+        WHERE occurred_at >= now() - ($1::int * interval '1 day')`, [days]),
     ])
     const byStatus = { new: 0, in_progress: 0, resolved: 0, dismissed: 0 }
     const byCategory: Record<string, number> = {}
@@ -424,6 +622,14 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       daily: daily.rows.map((row) => ({ date: row.date, starts: row.starts, completions: row.completions })),
       sessions: sessions.rows.map((row) => ({ sessionId: row.session_id, starts: row.starts, completions: row.completions, completionRate: row.starts ? Math.min(1, row.completions / row.starts) : 0 })),
       feedback: { total, byStatus, byCategory },
+      review: {
+        originalAnswers: Number(reviewStats.rows[0].original_answers),
+        variantAnswers: Number(reviewStats.rows[0].variant_answers),
+        originalCorrectRate: reviewStats.rows[0].original_correct_rate === null ? null : Number(reviewStats.rows[0].original_correct_rate),
+        variantCorrectRate: reviewStats.rows[0].variant_correct_rate === null ? null : Number(reviewStats.rows[0].variant_correct_rate),
+        weeklyReportViews: Number(reportStats.rows[0].views),
+        weeklyReportActions: Number(reportStats.rows[0].actions),
+      },
     } })
   })
 
@@ -504,7 +710,7 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
     if (!await authorizeAdmin(request, reply, admin)) return
     const { window } = z.object({ window: z.enum(['7d', '30d']).default('7d') }).parse(request.query)
     const days = window === '7d' ? 7 : 30
-    const [summary, statuses, models, ratings] = await Promise.all([
+    const [summary, statuses, models, ratings, generation] = await Promise.all([
       database.pool.query(`SELECT count(*)::int total,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) latency_p50,
         percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) latency_p95,
@@ -519,6 +725,13 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
         WHERE created_at >= now() - ($1::int * interval '1 day') GROUP BY model_id ORDER BY count DESC`, [days]),
       database.pool.query(`SELECT count(*)::int total, count(*) FILTER (WHERE helpful)::int helpful
         FROM ai_evaluation_ratings WHERE updated_at >= now() - ($1::int * interval '1 day')`, [days]),
+      database.pool.query(`SELECT count(*)::int total,
+        count(*) FILTER (WHERE status='succeeded')::int succeeded,
+        count(*) FILTER (WHERE status='failed')::int failed,
+        coalesce(sum(prompt_tokens),0)::int prompt_tokens,
+        coalesce(sum(completion_tokens),0)::int completion_tokens,
+        coalesce(sum(estimated_cost_usd),0)::float estimated_cost_usd
+        FROM admin_ai_generation_runs WHERE created_at >= now() - ($1::int * interval '1 day')`, [days]),
     ])
     const row = summary.rows[0]
     const byStatus = { queued: 0, processing: 0, succeeded: 0, degraded: 0, blocked: 0, canceled: 0 }
@@ -536,6 +749,10 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       formatRetryRate: row.total ? Math.min(1, Number(row.format_retries) / Number(row.total)) : 0,
       helpfulRate: rating.total ? Number(rating.helpful) / Number(rating.total) : null,
       models: models.rows.map((item) => ({ modelId: item.model_id, count: Number(item.count) })),
+      contentGeneration: {
+        total: Number(generation.rows[0].total), succeeded: Number(generation.rows[0].succeeded), failed: Number(generation.rows[0].failed),
+        promptTokens: Number(generation.rows[0].prompt_tokens), completionTokens: Number(generation.rows[0].completion_tokens), estimatedCostUsd: Number(generation.rows[0].estimated_cost_usd),
+      },
     } })
   })
 }

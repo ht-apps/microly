@@ -6,7 +6,7 @@ import {
   AiEvaluationResultSchema,
   type AiEvaluationResult,
 } from '@microly/api-contract'
-import { TrainingContentBundleSchema, type PracticeCard, type TrainingSession } from '@microly/content-schema'
+import { ReviewVariantSchema, TrainingContentBundleSchema, type PracticeCard, type TrainingSession } from '@microly/content-schema'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
@@ -43,6 +43,12 @@ export interface AiProvider {
     config: AiModelRuntimeConfig
     signal: AbortSignal
   }): Promise<AiProviderResult>
+  generateReviewVariants?(input: {
+    session: TrainingSession
+    count: number
+    config: AiModelRuntimeConfig
+    signal: AbortSignal
+  }): Promise<AiProviderResult>
 }
 
 const ProviderOutputSchema = z.object({
@@ -59,7 +65,65 @@ const ProviderOutputSchema = z.object({
   }).strict(),
 }).strict()
 
+export class AiProviderValidationError extends Error {
+  constructor(readonly issuePaths: string[]) {
+    super('deepseek_invalid_review_variants')
+    this.name = 'AiProviderValidationError'
+  }
+}
+
 export function createDeepseekProvider(apiKey: string, baseUrl = 'https://api.deepseek.com'): AiProvider {
+  const completeJson = async (system: string, user: string, config: AiModelRuntimeConfig, signal: AbortSignal) => {
+    let lastFailure: unknown
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: config.modelId,
+            messages: [{ role: 'system', content: system }, {
+              role: 'user',
+              content: attempt === 0
+                ? user
+                : `${user}\n\n上一次输出无法解析为完整 JSON。请重新输出一个完整 JSON 对象，不要截断，不要包含 Markdown、注释或额外文字。`,
+            }],
+            response_format: { type: 'json_object' },
+            thinking: { type: config.thinkingEnabled ? 'enabled' : 'disabled' },
+            max_tokens: config.maxTokens,
+            ...(config.thinkingEnabled ? {} : { temperature: config.temperature }),
+            stream: false,
+          }),
+          signal,
+        })
+        if (!response.ok) {
+          if ((response.status === 429 || response.status >= 500) && attempt === 0) continue
+          throw new Error(`deepseek_http_${response.status}`)
+        }
+        const body = await response.json() as {
+          model?: string
+          choices?: Array<{ message?: { content?: string | null } }>
+          usage?: { prompt_tokens?: number; prompt_cache_hit_tokens?: number; prompt_cache_miss_tokens?: number; completion_tokens?: number }
+        }
+        const content = body.choices?.[0]?.message?.content
+        if (!content) throw new Error('deepseek_empty_output')
+        return {
+          value: JSON.parse(content), modelId: body.model ?? config.modelId, formatRetries: attempt,
+          usage: {
+            promptTokens: body.usage?.prompt_tokens ?? 0,
+            cacheHitTokens: body.usage?.prompt_cache_hit_tokens ?? 0,
+            cacheMissTokens: body.usage?.prompt_cache_miss_tokens ?? body.usage?.prompt_tokens ?? 0,
+            completionTokens: body.usage?.completion_tokens ?? 0,
+          },
+        }
+      } catch (cause) {
+        if (signal.aborted) throw cause
+        lastFailure = cause
+        if (attempt === 0) continue
+      }
+    }
+    throw lastFailure instanceof Error ? lastFailure : new Error('deepseek_invalid_output')
+  }
   return {
     async listModels() {
       const response = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10000) })
@@ -80,57 +144,73 @@ export function createDeepseekProvider(apiKey: string, baseUrl = 'https://api.de
         rubric,
         userExpression: text,
       })
-      let lastFailure: unknown
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      for (let validationAttempt = 0; validationAttempt < 2; validationAttempt += 1) {
+        const result = await completeJson(system, user, config, signal)
         try {
-          const response = await fetch(`${baseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: config.modelId,
-              messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-              response_format: { type: 'json_object' },
-              thinking: { type: config.thinkingEnabled ? 'enabled' : 'disabled' },
-              max_tokens: config.maxTokens,
-              ...(config.thinkingEnabled ? {} : { temperature: config.temperature }),
-              stream: false,
-            }),
-            signal,
-          })
-          if (!response.ok) {
-            if ((response.status === 429 || response.status >= 500) && attempt === 0) continue
-            throw new Error(`deepseek_http_${response.status}`)
-          }
-          const body = await response.json() as {
-            model?: string
-            choices?: Array<{ message?: { content?: string | null } }>
-            usage?: { prompt_tokens?: number; prompt_cache_hit_tokens?: number; prompt_cache_miss_tokens?: number; completion_tokens?: number }
-          }
-          const content = body.choices?.[0]?.message?.content
-          if (!content) throw new Error('deepseek_empty_output')
-          const value = ProviderOutputSchema.parse(JSON.parse(content))
+          const value = ProviderOutputSchema.parse(result.value)
           const expectedDimensions = card.dimensions.map((item) => item.id).sort()
           const actualDimensions = value.dimensions.map((item) => item.dimensionId).sort()
           if (JSON.stringify(expectedDimensions) !== JSON.stringify(actualDimensions)) throw new Error('deepseek_invalid_dimensions')
           if (!value.safety.allowed && value.rewrite !== null) throw new Error('deepseek_unsafe_rewrite')
-          return {
-            value,
-            modelId: body.model ?? config.modelId,
-            usage: {
-              promptTokens: body.usage?.prompt_tokens ?? 0,
-              cacheHitTokens: body.usage?.prompt_cache_hit_tokens ?? 0,
-              cacheMissTokens: body.usage?.prompt_cache_miss_tokens ?? body.usage?.prompt_tokens ?? 0,
-              completionTokens: body.usage?.completion_tokens ?? 0,
-            },
-            formatRetries: attempt,
-          }
+          return { ...result, value, formatRetries: result.formatRetries + validationAttempt }
         } catch (cause) {
           if (signal.aborted) throw cause
-          lastFailure = cause
-          if (attempt === 0) continue
+          if (validationAttempt === 1) throw cause
         }
       }
-      throw lastFailure instanceof Error ? lastFailure : new Error('deepseek_invalid_output')
+      throw new Error('deepseek_invalid_output')
+    },
+    async generateReviewVariants({ session, count, config, signal }) {
+      const focuses = ['时间与交付变化', '资源与依赖变化', '优先级与协作变化']
+      const generateOne = async (candidateIndex: number) => {
+        const system = `你是微习的职场训练内容编辑。生成与原训练目标一致但情景和选项不同的低风险复习选择题。本次只生成 1 个候选，变化方向为“${focuses[candidateIndex % focuses.length]}”。不得涉及真实个人、公司、法律、医疗、安全事故或人格评价。
+严格输出 1 个候选：variantId 和选项 id 只能使用小写英文、数字和连字符；title 1–40 字；context 40–120 字；question 1–50 字；prompt 1–60 字；每个反馈字段 1–140 字。每题恰好 3 个不同 ID 的选项，且恰好一个 recommended。condition 可以省略，但不得输出 null。只输出 JSON，不要 Markdown 或额外说明。`
+        const user = JSON.stringify({
+          count: 1,
+          candidateNumber: candidateIndex + 1,
+          output: { candidates: [{ variantId: '小写英文数字连字符', title: '标题', context: '40到120字情景', question: '问题', prompt: '选择提示', options: [{ id: '选项ID', text: '表达', rating: 'recommended|risky|not_recommended', feedback: { interpretation: '理解', strength: '优点', risk: '风险', condition: '适用条件可选' } }] }] },
+          sourceSession: session,
+        })
+        let validationFeedback = ''
+        for (let validationAttempt = 0; validationAttempt < 2; validationAttempt += 1) {
+          const correction = validationFeedback
+            ? `\n\n上一次结果未通过 Schema 校验。只修正以下结构问题后重新输出完整 JSON：${validationFeedback}`
+            : ''
+          const result = await completeJson(system, `${user}${correction}`, config, signal)
+          const parsed = z.object({ candidates: z.array(ReviewVariantSchema).length(1) }).strict().safeParse(result.value)
+          if (parsed.success) return { ...result, candidate: parsed.data.candidates[0]!, formatRetries: result.formatRetries + validationAttempt }
+          if (signal.aborted) throw parsed.error
+          if (validationAttempt === 1) {
+            throw new AiProviderValidationError(parsed.error.issues.slice(0, 12).map((issue) => issue.path.map(String).join('.') || 'root'))
+          }
+          validationFeedback = JSON.stringify(parsed.error.issues.slice(0, 12).map((issue) => ({
+            path: issue.path.map(String).join('.'),
+            rule: issue.message,
+          })))
+        }
+        throw new Error('deepseek_invalid_review_variants')
+      }
+      const results = await Promise.all(Array.from({ length: count }, (_, index) => generateOne(index)))
+      const usedIds = new Set(session.reviewVariants.map((variant) => variant.variantId))
+      const candidates = results.map(({ candidate }, index) => {
+        const copy = structuredClone(candidate)
+        const baseId = copy.variantId
+        let suffix = index + 1
+        while (usedIds.has(copy.variantId)) copy.variantId = `${baseId}-${suffix++}`
+        usedIds.add(copy.variantId)
+        return copy
+      })
+      return {
+        value: { candidates },
+        modelId: results[0]!.modelId,
+        usage: results.reduce((total, result) => ({
+          promptTokens: total.promptTokens + result.usage.promptTokens,
+          cacheHitTokens: total.cacheHitTokens + result.usage.cacheHitTokens,
+          cacheMissTokens: total.cacheMissTokens + result.usage.cacheMissTokens,
+          completionTokens: total.completionTokens + result.usage.completionTokens,
+        }), { promptTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, completionTokens: 0 }),
+        formatRetries: results.reduce((total, result) => total + result.formatRetries, 0),
+      }
     },
   }
 }
@@ -201,7 +281,7 @@ function serialize(row: Record<string, any>) {
   }
 }
 
-async function activeConfig(database: DatabaseContext): Promise<AiModelRuntimeConfig | null> {
+export async function activeConfig(database: DatabaseContext): Promise<AiModelRuntimeConfig | null> {
   const result = await database.pool.query(`SELECT model_id, revision, thinking_enabled, max_tokens, temperature,
     timeout_ms, daily_quota, input_cache_hit_price, input_cache_miss_price, output_price
     FROM ai_model_configs WHERE active = true LIMIT 1`)

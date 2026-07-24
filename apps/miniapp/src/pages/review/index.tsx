@@ -7,11 +7,7 @@ import { trainingContent } from '../../data/training-content'
 import { readLearningActivitySnapshot } from '../../features/activity/activity-snapshot'
 import { createDueReviewAnsweredEvent } from '../../features/activity/activity-state'
 import { recordLearningActivity } from '../../features/activity/activity-storage'
-import {
-  findTrainingOption,
-  formatReviewDate,
-  type ResolvedReviewItem,
-} from '../../features/review/review-state'
+import { formatReviewDate, resolveReviewQuestion, type ResolvedReviewItem } from '../../features/review/review-state'
 import { readReviewSnapshot } from '../../features/review/review-snapshot'
 import { saveReviewAnswer } from '../../features/review/review-storage'
 import { flushFullSync } from '../../features/sync/state-sync'
@@ -66,12 +62,14 @@ export default function ReviewPage() {
   }
 
   const activeEntry = runItems[runState.currentIndex]
+  const activeQuestion = activeEntry ? resolveReviewQuestion(activeEntry) : null
 
   const confirmAnswer = () => {
     if (
       !activeEntry
       || !runState.selectedOptionId
       || runState.answerConfirmed
+      || !activeQuestion
     ) return
     const answeredAt = new Date().toISOString()
     const saved = saveReviewAnswer(
@@ -80,6 +78,7 @@ export default function ReviewPage() {
       activeEntry.session,
       runState.selectedOptionId,
       answeredAt,
+      activeQuestion.variantId,
     )
     void flushFullSync()
     if (!saved.result) return
@@ -90,6 +89,7 @@ export default function ReviewPage() {
     const activityEvent = createDueReviewAnsweredEvent(
       activeEntry.item,
       answeredAt,
+      { variantId: activeQuestion.variantId, selectedOptionRating: saved.result.option.rating, isCorrect: saved.result.isCorrect },
     )
     if (activityEvent) {
       const activity = recordLearningActivity(
@@ -120,10 +120,10 @@ export default function ReviewPage() {
   }
 
   if (view === 'quiz' && activeEntry) {
-    const { session, choiceCard } = activeEntry
-    const scenarioCard = session.cards.find((card) => card.type === 'scenario')
-    const selectedOption = findTrainingOption(session, runState.selectedOptionId)
-    const recommendedOption = choiceCard.options.find(
+    const { session } = activeEntry
+    const question = activeQuestion ?? resolveReviewQuestion(activeEntry)
+    const selectedOption = question.options.find((option) => option.id === runState.selectedOptionId)
+    const recommendedOption = question.options.find(
       (option) => option.rating === 'recommended',
     )
 
@@ -141,15 +141,13 @@ export default function ReviewPage() {
         )}
 
         <View className='review-quiz-card'>
-          <Text className='review-eyebrow'>{session.title}</Text>
-          <Text className='review-title'>{scenarioCard?.title ?? choiceCard.prompt}</Text>
-          {scenarioCard && (
-            <Text className='review-context'>{scenarioCard.context}</Text>
-          )}
-          <Text className='review-question'>{choiceCard.prompt}</Text>
+          <Text className='review-eyebrow'>{question.variantId ? `复习变体 · ${session.title}` : session.title}</Text>
+          <Text className='review-title'>{question.title}</Text>
+          <Text className='review-context'>{question.context}</Text>
+          <Text className='review-question'>{question.prompt}</Text>
 
           <View className='review-option-list'>
-            {choiceCard.options.map((option, index) => {
+            {question.options.map((option, index) => {
               const isSelected = option.id === runState.selectedOptionId
               return (
                 <Button

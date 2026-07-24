@@ -6,7 +6,7 @@ import {
   REVIEW_INTERVALS,
   createReviewId,
   findChoiceCard,
-  findTrainingOption,
+  findReviewOption,
   scheduleReviewAnswer,
   upsertReviewFromTraining,
   type ReviewItem,
@@ -26,8 +26,9 @@ function isIsoTime(value: unknown): value is string {
 function isReviewItem(value: unknown, session: TrainingSession) {
   if (!isRecord(value)) return false
   const choiceCard = findChoiceCard(session)
+  const lastVariantId = typeof value.lastVariantId === 'string' ? value.lastVariantId : null
   const option = typeof value.lastSelectedOptionId === 'string'
-    ? findTrainingOption(session, value.lastSelectedOptionId)
+    ? findReviewOption(session, lastVariantId, value.lastSelectedOptionId)
     : null
 
   return Boolean(
@@ -35,7 +36,6 @@ function isReviewItem(value: unknown, session: TrainingSession) {
     && option
     && value.reviewId === createReviewId(session.sessionId)
     && value.sessionId === session.sessionId
-    && value.contentVersion === session.contentVersion
     && value.sourceCardId === choiceCard.id
     && REVIEW_INTERVALS.includes(value.intervalDays as never)
     && typeof value.consecutiveCorrect === 'number'
@@ -45,7 +45,9 @@ function isReviewItem(value: unknown, session: TrainingSession) {
     && isIsoTime(value.dueAt)
     && isIsoTime(value.createdAt)
     && isIsoTime(value.updatedAt)
-    && (value.lastReviewedAt === null || isIsoTime(value.lastReviewedAt)),
+    && (value.lastReviewedAt === null || isIsoTime(value.lastReviewedAt))
+    && (value.reviewCount === undefined || (typeof value.reviewCount === 'number' && Number.isInteger(value.reviewCount) && value.reviewCount >= 0))
+    && (value.lastVariantId === null || value.lastVariantId === undefined || typeof value.lastVariantId === 'string')
   )
 }
 
@@ -72,21 +74,33 @@ export function parseReviewQueue(
       return []
     }
     const session = sessionMap.get(candidate.sessionId)
+    if (!session) return []
+    const requestedVariantId = typeof candidate.lastVariantId === 'string' ? candidate.lastVariantId : null
+    const requestedOptionId = typeof candidate.lastSelectedOptionId === 'string' ? candidate.lastSelectedOptionId : null
+    const requestedOption = findReviewOption(session, requestedVariantId, requestedOptionId)
+    const fallbackOption = findChoiceCard(session)?.options.find((option) => option.rating === 'recommended')
+    const normalized = {
+      ...candidate,
+      contentVersion: session.contentVersion,
+      sourceCardId: findChoiceCard(session)?.id,
+      reviewCount: typeof candidate.reviewCount === 'number' ? candidate.reviewCount : 0,
+      lastVariantId: requestedOption ? requestedVariantId : null,
+      lastSelectedOptionId: requestedOption?.id ?? fallbackOption?.id,
+    }
     if (
-      !session
-      || !isReviewItem(candidate, session)
+      !isReviewItem(normalized, session)
       || typeof candidate.reviewId !== 'string'
       || reviewIds.has(candidate.reviewId)
     ) {
       return []
     }
     reviewIds.add(candidate.reviewId)
-    return [candidate as unknown as ReviewItem]
+    return [normalized as unknown as ReviewItem]
   })
 
   return {
     items,
-    recoveredFromInvalid: items.length !== value.length,
+    recoveredFromInvalid: items.length !== value.length || items.some((item, index) => JSON.stringify(item) !== JSON.stringify(value[index])),
   }
 }
 
@@ -150,6 +164,7 @@ export function saveReviewAnswer(
   session: TrainingSession,
   selectedOptionId: string,
   answeredAt?: string,
+  variantId: string | null = null,
 ) {
   const stored = readReviewQueue(sessions)
   const scheduled = scheduleReviewAnswer(
@@ -157,6 +172,7 @@ export function saveReviewAnswer(
     session,
     selectedOptionId,
     answeredAt,
+    variantId,
   )
   if (!scheduled) {
     return { result: null, writeFailed: false, recoveredFromInvalid: false }

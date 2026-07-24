@@ -1,5 +1,6 @@
 import type {
   ChoiceCard,
+  ReviewVariant,
   TrainingOption,
   TrainingSession,
 } from '@microly/content-schema'
@@ -23,6 +24,8 @@ export interface ReviewItem {
   createdAt: string
   updatedAt: string
   lastReviewedAt: string | null
+  reviewCount: number
+  lastVariantId: string | null
 }
 
 export interface ReviewMutation {
@@ -35,6 +38,15 @@ export interface ResolvedReviewItem {
   item: ReviewItem
   session: TrainingSession
   choiceCard: ChoiceCard
+}
+
+export interface ResolvedReviewQuestion {
+  variantId: string | null
+  title: string
+  context: string
+  question: string
+  prompt: string
+  options: TrainingOption[]
 }
 
 export interface ReviewOverview {
@@ -62,6 +74,36 @@ export function findTrainingOption(
   if (!optionId) return null
   return findChoiceCard(session)?.options.find((option) => option.id === optionId)
     ?? null
+}
+
+export function findReviewOption(session: TrainingSession, variantId: string | null, optionId: string | null) {
+  if (!optionId) return null
+  if (variantId) return session.reviewVariants.find((variant) => variant.variantId === variantId)?.options.find((option) => option.id === optionId) ?? null
+  return findTrainingOption(session, optionId)
+}
+
+export function resolveReviewQuestion(entry: ResolvedReviewItem): ResolvedReviewQuestion {
+  const { item, session, choiceCard } = entry
+  const scenario = session.cards.find((card) => card.type === 'scenario')
+  const useVariant = session.reviewVariants.length > 0 && item.reviewCount % 2 === 0
+  const variant: ReviewVariant | undefined = useVariant
+    ? session.reviewVariants[Math.floor(item.reviewCount / 2) % session.reviewVariants.length]
+    : undefined
+  return variant ? {
+    variantId: variant.variantId,
+    title: variant.title,
+    context: variant.context,
+    question: variant.question,
+    prompt: variant.prompt,
+    options: variant.options,
+  } : {
+    variantId: null,
+    title: scenario?.title ?? session.title,
+    context: scenario?.context ?? '',
+    question: scenario?.question ?? choiceCard.prompt,
+    prompt: choiceCard.prompt,
+    options: choiceCard.options,
+  }
 }
 
 export function addReviewDays(isoTime: string, days: number) {
@@ -110,6 +152,8 @@ function createReviewItem(
     createdAt: occurredAt,
     updatedAt: occurredAt,
     lastReviewedAt: null,
+    reviewCount: 0,
+    lastVariantId: null,
   }
 }
 
@@ -159,8 +203,9 @@ export function scheduleReviewAnswer(
   session: TrainingSession,
   selectedOptionId: string,
   answeredAt = new Date().toISOString(),
+  variantId: string | null = null,
 ) {
-  const option = findTrainingOption(session, selectedOptionId)
+  const option = findReviewOption(session, variantId, selectedOptionId)
   if (!option) return null
 
   const isCorrect = option.rating === 'recommended'
@@ -181,6 +226,8 @@ export function scheduleReviewAnswer(
       lastResult: isCorrect ? 'correct' as const : 'incorrect' as const,
       updatedAt: answeredAt,
       lastReviewedAt: answeredAt,
+      reviewCount: item.reviewCount + 1,
+      lastVariantId: variantId,
     },
   }
 }

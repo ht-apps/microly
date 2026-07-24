@@ -26,6 +26,22 @@ export const TrainingOptionSchema = z.object({
   feedback: OptionFeedbackSchema,
 })
 
+export const ReviewVariantSchema = z.object({
+  variantId: IdentifierSchema,
+  title: z.string().min(1).max(40),
+  context: z.string().min(40).max(120),
+  question: z.string().min(1).max(50),
+  prompt: z.string().min(1).max(60),
+  options: z.array(TrainingOptionSchema).length(3),
+}).superRefine((variant, context) => {
+  if (new Set(variant.options.map((option) => option.id)).size !== variant.options.length) {
+    context.addIssue({ code: 'custom', message: '复习变体选项 ID 不能重复', path: ['options'] })
+  }
+  if (variant.options.filter((option) => option.rating === 'recommended').length !== 1) {
+    context.addIssue({ code: 'custom', message: '复习变体必须且只能包含一个推荐选项', path: ['options'] })
+  }
+})
+
 export const ScenarioCardSchema = z.object({
   id: IdentifierSchema,
   type: z.literal('scenario'),
@@ -138,6 +154,7 @@ export const TrainingSessionSchema = z.object({
   riskLevel: z.enum(['low', 'medium', 'high']),
   estimatedMinutes: z.number().int().min(1).max(10),
   cards: z.array(TrainingCardSchema).length(expectedCardOrder.length),
+  reviewVariants: z.array(ReviewVariantSchema).max(5).default([]),
 }).superRefine((session, context) => {
   const cardIds = new Set(session.cards.map((card) => card.id))
   if (cardIds.size !== session.cards.length) {
@@ -155,6 +172,18 @@ export const TrainingSessionSchema = z.object({
         message: `第 ${index + 1} 张卡片必须是 ${type}`,
         path: ['cards', index, 'type'],
       })
+    }
+  })
+  const variantIds = new Set<string>()
+  const originalChoice = session.cards.find((card) => card.type === 'choice')
+  session.reviewVariants.forEach((variant, index) => {
+    if (variantIds.has(variant.variantId)) {
+      context.addIssue({ code: 'custom', message: '复习变体 ID 不能重复', path: ['reviewVariants', index, 'variantId'] })
+    }
+    variantIds.add(variant.variantId)
+    if (originalChoice && variant.prompt === originalChoice.prompt
+      && JSON.stringify(variant.options.map((option) => option.text)) === JSON.stringify(originalChoice.options.map((option) => option.text))) {
+      context.addIssue({ code: 'custom', message: '复习变体不能与原题完全相同', path: ['reviewVariants', index] })
     }
   })
 })
@@ -234,6 +263,7 @@ export const TrainingContentBundleSchema = z.object({
 
 export type TrainingOptionRating = z.infer<typeof TrainingOptionRatingSchema>
 export type TrainingOption = z.infer<typeof TrainingOptionSchema>
+export type ReviewVariant = z.infer<typeof ReviewVariantSchema>
 export type ScenarioCard = z.infer<typeof ScenarioCardSchema>
 export type ChoiceCard = z.infer<typeof ChoiceCardSchema>
 export type FeedbackCard = z.infer<typeof FeedbackCardSchema>

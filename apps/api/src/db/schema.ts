@@ -229,5 +229,23 @@ export const aiEvaluationRatings = pgTable('ai_evaluation_ratings', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
+export const adminAiGenerationRuns = pgTable('admin_ai_generation_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  operation: varchar('operation', { length: 40 }).notNull(),
+  targetId: text('target_id').notNull(),
+  provider: varchar('provider', { length: 30 }).notNull().default('deepseek'),
+  modelId: varchar('model_id', { length: 100 }).notNull(),
+  configRevision: integer('config_revision').notNull(),
+  promptVersion: varchar('prompt_version', { length: 80 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull(),
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  completionTokens: integer('completion_tokens').notNull().default(0),
+  estimatedCostUsd: doublePrecision('estimated_cost_usd').notNull().default(0),
+  latencyMs: integer('latency_ms'),
+  formatRetries: integer('format_retries').notNull().default(0),
+  failureCode: varchar('failure_code', { length: 80 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export type StoredTrainingCompletion = typeof trainingCompletions.$inferSelect
 export type NewTrainingCompletion = TrainingCompletion
