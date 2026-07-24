@@ -39,6 +39,19 @@
 .feedback-summary { width: 100%; }
 .feedback-summary > .ant-space-item > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .feedback-summary .ant-tag { min-width: 72px; text-align: center; }
+.service-card { height: 100%; }
+.service-card > .ant-card-body { display: grid; gap: 9px; }
+.service-card > .ant-card-body > div { display: flex; align-items: center; gap: 9px; }
+.service-card h4.ant-typography { margin: 0; }
+.service-dot { width: 9px; height: 9px; background: #d59a36; border-radius: 50%; box-shadow: 0 0 0 4px #d59a3618; }
+.service-dot.ok { background: #36a678; box-shadow: 0 0 0 4px #36a67818; }
+.service-dot.unavailable { background: #d64d5d; box-shadow: 0 0 0 4px #d64d5d18; }
+.operations-drawer { width: 100%; }
+.operations-drawer > .ant-space-item, .operations-status-select { width: 100%; }
+.api-runtime-card { margin-bottom: 16px; }
+.api-runtime-card .ant-space { width: 100%; justify-content: space-around; }
+.operations-rankings, .operations-rankings > .ant-space-item, .operations-rankings .ant-card { width: 100%; }
+.operations-issues-table .ant-table-row { cursor: pointer; }
 
 .content-workbench { min-height: 720px; background: transparent; border: 1px solid #e5e6ed; border-radius: 20px; box-shadow: 0 8px 28px #28233e0b; overflow: hidden; }
 .content-page.release-page { display: flex; height: calc(100dvh - 100px); min-height: 0; flex-direction: column; overflow: hidden; }

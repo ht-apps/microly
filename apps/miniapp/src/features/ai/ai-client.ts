@@ -12,6 +12,7 @@ import { isNetworkEnabled } from '../network/network-config'
 import type { TrainingProgress } from '../training/training-state'
 import { resolveAiAccessState } from './ai-access'
 import { readCachedAiEvaluations, writeCachedAiEvaluations } from './ai-history-storage'
+import { captureClientError } from '../diagnostics/client-errors'
 
 export function readAiAccessState() {
   return resolveAiAccessState({
@@ -44,6 +45,8 @@ export async function submitAiEvaluation(session: TrainingSession, card: Practic
     },
   })
   const parsed = AiEvaluationResponseSchema.safeParse(response?.data)
+  if (response && response.statusCode >= 500) captureClientError('ai', null, { severity: 'warning', errorCode: `http_${response.statusCode}`, contentVersion: session.contentVersion })
+  else if (response?.statusCode === 200 && !parsed.success) captureClientError('ai', null, { errorCode: 'invalid_ai_response', contentVersion: session.contentVersion })
   return {
     evaluation: parsed.success ? parsed.data.data : null,
     statusCode: response?.statusCode ?? 0,

@@ -7,6 +7,7 @@ import {
   AdminDraftUpdateRequestSchema,
   AdminFeedbackStatusSchema,
   AdminFeedbackUpdateRequestSchema,
+  AdminClientErrorUpdateRequestSchema,
   AdminPublishRequestSchema,
   AdminReviewVariantGenerateRequestSchema,
   AdminWithdrawRequestSchema,
@@ -18,6 +19,7 @@ import { z } from 'zod'
 import type { DatabaseContext } from './db/client.js'
 import { checksumBundle } from './db/seed.js'
 import { activeConfig, AiProviderValidationError, type AiProvider } from './ai.js'
+import type { RuntimeMetrics } from './runtime-metrics.js'
 
 const feedbackCategories = ['content_error', 'product_suggestion', 'inappropriate_content'] as const
 const funnelNames = ['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success'] as const
@@ -273,7 +275,7 @@ async function publishDraft(database: DatabaseContext, draftId: string, revision
   }
 }
 
-export function registerAdminRoutes(app: FastifyInstance, database: DatabaseContext, admin?: AdminOptions, ai?: { provider?: AiProvider; configured: boolean }) {
+export function registerAdminRoutes(app: FastifyInstance, database: DatabaseContext, admin?: AdminOptions, ai?: { provider?: AiProvider; configured: boolean; runtimeMetrics?: RuntimeMetrics }) {
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin
     if (admin && origin && admin.origins.includes(origin)) {
@@ -631,6 +633,79 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
         weeklyReportActions: Number(reportStats.rows[0].actions),
       },
     } })
+  })
+
+  app.get('/v1/admin/operations', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { window } = z.object({ window: z.enum(['1h', '24h', '7d']).default('24h') }).parse(request.query)
+    const interval = window === '1h' ? '1 hour' : window === '24h' ? '24 hours' : '7 days'
+    const bucket = window === '1h'
+      ? `date_trunc('minute', received_at) - (extract(minute FROM received_at)::int % 10) * interval '1 minute'`
+      : window === '24h' ? `date_trunc('hour', received_at)` : `date_trunc('day', received_at)`
+    const [summary, daily, pages, versions, issues, content, model] = await Promise.all([
+      database.pool.query(`SELECT count(*)::int total, count(DISTINCT account_id)::int affected_accounts,
+        count(DISTINCT fingerprint) FILTER (WHERE status <> 'resolved')::int unresolved
+        FROM client_error_reports WHERE received_at >= now() - $1::interval`, [interval]),
+      database.pool.query(`SELECT to_char(${bucket}, 'YYYY-MM-DD HH24:MI') time,
+        count(*) FILTER (WHERE severity='warning')::int warnings,
+        count(*) FILTER (WHERE severity='error')::int errors,
+        count(*) FILTER (WHERE severity='fatal')::int fatals
+        FROM client_error_reports WHERE received_at >= now() - $1::interval GROUP BY 1 ORDER BY 1`, [interval]),
+      database.pool.query(`SELECT page, count(*)::int count FROM client_error_reports
+        WHERE received_at >= now() - $1::interval GROUP BY page ORDER BY count DESC LIMIT 10`, [interval]),
+      database.pool.query(`SELECT app_version, count(*)::int count FROM client_error_reports
+        WHERE received_at >= now() - $1::interval GROUP BY app_version ORDER BY count DESC LIMIT 10`, [interval]),
+      database.pool.query(`SELECT fingerprint, category, severity, page, error_code,
+        count(*)::int count, count(DISTINCT account_id)::int affected_accounts,
+        min(occurred_at) first_seen_at, max(occurred_at) last_seen_at,
+        CASE WHEN bool_or(status='new') THEN 'new' WHEN bool_or(status='in_progress') THEN 'in_progress' ELSE 'resolved' END status,
+        (array_agg(internal_note ORDER BY updated_at DESC) FILTER (WHERE internal_note IS NOT NULL))[1] internal_note
+        FROM client_error_reports WHERE received_at >= now() - $1::interval
+        GROUP BY fingerprint, category, severity, page, error_code
+        ORDER BY max(occurred_at) DESC LIMIT 100`, [interval]),
+      database.pool.query('SELECT release_version FROM content_releases ORDER BY release_version DESC LIMIT 1'),
+      database.pool.query('SELECT model_id FROM ai_model_configs WHERE active=true LIMIT 1'),
+    ])
+    const total = Number(summary.rows[0]?.total ?? 0)
+    const fatalCount = daily.rows.reduce((sum, row) => sum + Number(row.fatals), 0)
+    const activeModelId = model.rows[0]?.model_id ?? null
+    const apiMetrics = ai?.runtimeMetrics?.snapshot(window === '1h' ? 60 * 60 * 1000 : window === '24h' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000)
+      ?? { requests: 0, errorRate: 0, latencyP50: null, latencyP95: null }
+    const level = fatalCount > 0 || total >= 100 || apiMetrics.errorRate >= 0.1
+      ? 'critical'
+      : total >= 20 || apiMetrics.errorRate >= 0.03 ? 'attention' : 'normal'
+    return reply.send({ data: {
+      window,
+      generatedAt: new Date().toISOString(),
+      services: {
+        process: 'ok', database: 'ok', ai: ai?.configured ? (activeModelId ? 'ok' : 'unavailable') : 'disabled',
+        content: content.rows[0] ? 'ok' : 'unavailable', currentContentVersion: content.rows[0]?.release_version ?? null, activeModelId,
+      },
+      summary: { total, unresolved: Number(summary.rows[0]?.unresolved ?? 0), affectedAccounts: Number(summary.rows[0]?.affected_accounts ?? 0), level },
+      api: apiMetrics,
+      daily: daily.rows.map((row) => ({ time: row.time, warnings: Number(row.warnings), errors: Number(row.errors), fatals: Number(row.fatals) })),
+      pages: pages.rows.map((row) => ({ page: row.page, count: Number(row.count) })),
+      versions: versions.rows.map((row) => ({ appVersion: row.app_version, count: Number(row.count) })),
+      issues: issues.rows.map((row) => ({
+        fingerprint: row.fingerprint, category: row.category, severity: row.severity, page: row.page,
+        errorCode: row.error_code, count: Number(row.count), affectedAccounts: Number(row.affected_accounts),
+        firstSeenAt: row.first_seen_at.toISOString(), lastSeenAt: row.last_seen_at.toISOString(),
+        status: row.status, internalNote: row.internal_note,
+      })),
+    } })
+  })
+
+  app.patch('/v1/admin/operations/errors/:fingerprint', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { fingerprint } = z.object({ fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).parse(request.params)
+    const input = AdminClientErrorUpdateRequestSchema.parse(request.body)
+    const updated = await database.pool.query(`UPDATE client_error_reports SET status=$2::varchar, internal_note=$3,
+      updated_at=now(), resolved_at=CASE WHEN $2::varchar='resolved' THEN now() ELSE NULL END
+      WHERE fingerprint=$1 RETURNING report_id`, [fingerprint, input.status, input.internalNote ?? null])
+    if (!updated.rowCount) return sendError(reply, 404, 'client_error_not_found', '错误报告不存在。')
+    await database.pool.query(`INSERT INTO admin_audit_logs (action, target_type, target_id, metadata)
+      VALUES ('client_error.status.update', 'client_error', $1, $2::jsonb)`, [fingerprint, JSON.stringify({ status: input.status })])
+    return reply.send({ data: { fingerprint, status: input.status, internalNote: input.internalNote ?? null } })
   })
 
   const serializeAiConfig = (row: Record<string, any>) => ({

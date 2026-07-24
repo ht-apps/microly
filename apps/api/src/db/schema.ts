@@ -6,6 +6,7 @@ import type {
   SyncPreference,
   TrainingCompletion,
   TrainingProgressSyncRecord,
+  ClientErrorReport,
 } from '@microly/api-contract'
 import type { TrainingContentBundle } from '@microly/content-schema'
 import {
@@ -245,6 +246,27 @@ export const adminAiGenerationRuns = pgTable('admin_ai_generation_runs', {
   formatRetries: integer('format_retries').notNull().default(0),
   failureCode: varchar('failure_code', { length: 80 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const clientErrorReports = pgTable('client_error_reports', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  reportId: uuid('report_id').notNull().unique(),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  fingerprint: varchar('fingerprint', { length: 64 }).notNull(),
+  category: varchar('category', { length: 30 }).$type<ClientErrorReport['category']>().notNull(),
+  severity: varchar('severity', { length: 12 }).$type<ClientErrorReport['severity']>().notNull(),
+  page: varchar('page', { length: 120 }).notNull(),
+  appVersion: varchar('app_version', { length: 40 }).notNull(),
+  contentVersion: integer('content_version'),
+  networkType: varchar('network_type', { length: 20 }).notNull(),
+  errorCode: varchar('error_code', { length: 80 }),
+  stackDigest: varchar('stack_digest', { length: 64 }),
+  status: varchar('status', { length: 20 }).$type<'new' | 'in_progress' | 'resolved'>().notNull().default('new'),
+  internalNote: text('internal_note'),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
 })
 
 export type StoredTrainingCompletion = typeof trainingCompletions.$inferSelect

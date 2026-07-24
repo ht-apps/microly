@@ -58,6 +58,9 @@ export default function SettingsPage() {
       <Button className='microly-button settings-link' onClick={() => Taro.navigateTo({ url: '/pages/feedback/index' })}>
         <Text>意见反馈</Text><Text className='settings-link__arrow'>›</Text>
       </Button>
+      <Button className='microly-button settings-link' onClick={() => Taro.navigateTo({ url: '/pages/diagnostics/index' })}>
+        <Text>诊断信息</Text><Text className='settings-link__arrow'>›</Text>
+      </Button>
     </View>
     <View className='settings-account-actions'>
       {status.authType === 'wechat' && <Button className='microly-button settings-plain' onClick={logout}>退出登录</Button>}

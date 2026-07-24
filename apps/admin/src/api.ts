@@ -13,6 +13,8 @@ import {
   AdminSessionResponseSchema,
   AdminWithdrawResponseSchema,
   AdminReviewVariantGenerateResponseSchema,
+  AdminOperationsResponseSchema,
+  AdminClientErrorUpdateResponseSchema,
   type AdminContentDraft,
   type AdminContentIndex,
   type AdminContentReleaseSnapshot,
@@ -23,6 +25,7 @@ import {
   type AdminAiModelConfig,
   type AdminAiMetrics,
   type AdminReviewVariantGenerate,
+  type AdminOperations,
 } from '@microly/api-contract'
 
 const TOKEN_KEY = 'microly:admin-token'
@@ -155,6 +158,13 @@ export const adminApi = {
   ),
   getAiMetrics: (token: string, window: '7d' | '30d') => adminRequest<AdminAiMetrics>(
     `/v1/admin/ai/metrics?window=${window}`, token, { schema: AdminAiMetricsResponseSchema },
+  ),
+  getOperations: (token: string, window: '1h' | '24h' | '7d') => adminRequest<AdminOperations>(
+    `/v1/admin/operations?window=${window}`, token, { schema: AdminOperationsResponseSchema },
+  ),
+  updateClientError: (token: string, fingerprint: string, status: 'new' | 'in_progress' | 'resolved', internalNote: string | null) => adminRequest(
+    `/v1/admin/operations/errors/${fingerprint}`, token,
+    { ...json('PATCH', { status, internalNote }), schema: AdminClientErrorUpdateResponseSchema },
   ),
 }
 

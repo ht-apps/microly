@@ -107,6 +107,8 @@ VITE_API_BASE_URL=http://127.0.0.1:3000 pnpm dev:admin
 
 后台支持查看 7/30 天学习漏斗、处理反馈，以及从当前或历史版本创建 JSON 草稿。发布前会使用共享 Schema 校验并预览六类训练卡片；发布、回滚和下架只生成更高的新版本，不修改历史快照。AI 点评页可同步 DeepSeek 模型、切换当前模型、调整额度与参数，并查看用户点评和内容候选生成的聚合质量与成本指标。
 
+“运行保障”页提供 API、数据库、内容和 AI 状态，以及按安全指纹聚合的客户端错误。小程序错误报告不会包含错误正文、原始堆栈、主动表达、token 或请求参数；用户可在“账号与设置 → 诊断信息”查看本机诊断状态。
+
 生成复习变体时，在内容草稿中选择训练并点击“生成变体”。候选只会显示在确认窗口中，不会自动修改草稿；选择 1～3 条插入编辑器后，仍需依次保存、校验并发布。每组训练最多发布 5 个变体。DeepSeek 未配置时可以继续手工编辑 `reviewVariants`，不会影响内容发布或小程序复习。
 
 ## 构建
@@ -125,6 +127,16 @@ pnpm build:admin
 pnpm test
 pnpm typecheck
 ```
+
+封测发布前运行完整检查；配置 `DATABASE_URL` 时会额外核对迁移状态：
+
+```bash
+pnpm preflight
+pnpm db:backup
+pnpm db:restore:test -- backups/你的备份.dump
+```
+
+恢复命令只允许写入 Docker 隔离测试库 `microly_test`。详细流程见 [封测发布与故障处理清单](./docs/product/06-beta-operations-checklist.md)。
 
 API 集成测试使用独立的 `microly_test` 数据库：
 

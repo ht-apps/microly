@@ -18,6 +18,9 @@
     "db:down": "docker compose down",
     "db:migrate": "DATABASE_URL=postgresql://microly:microly@localhost:5432/microly pnpm --filter @microly/api db:migrate",
     "db:seed": "DATABASE_URL=postgresql://microly:microly@localhost:5432/microly pnpm --filter @microly/api db:seed",
+    "db:status": "DATABASE_URL=postgresql://microly:microly@localhost:5432/microly pnpm --filter @microly/api db:status",
+    "db:backup": "bash scripts/db-backup.sh",
+    "db:restore:test": "bash scripts/db-restore-test.sh",
     "db:test:up": "docker compose --profile test up -d postgres-test",
     "test:integration:api": "DATABASE_URL=postgresql://microly:microly@localhost:5433/microly_test pnpm --filter @microly/api test:integration",
     "eval:ai": "pnpm build:packages && pnpm --filter @microly/api eval:ai",
@@ -25,7 +28,8 @@
     "build:api": "pnpm build:packages && pnpm --filter @microly/api build",
     "build:admin": "pnpm build:packages && pnpm --filter @microly/admin build",
     "test": "pnpm build:packages && pnpm --recursive --if-present test",
-    "typecheck": "pnpm build:packages && pnpm --recursive --if-present typecheck"
+    "typecheck": "pnpm build:packages && pnpm --recursive --if-present typecheck",
+    "preflight": "node scripts/preflight.mjs"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

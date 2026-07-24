@@ -1,6 +1,7 @@
 import { defineConfig } from '@tarojs/cli'
 
 const apiBaseUrl = (process.env.TARO_APP_API_BASE_URL ?? '').trim()
+const appVersion = (process.env.TARO_APP_VERSION ?? '1.0.0').trim()
 
 // https://taro-docs.jd.com/docs/next/config#defineconfig-辅助函数
 export default defineConfig<'vite'>({
@@ -16,7 +17,8 @@ export default defineConfig<'vite'>({
   sourceRoot: 'src',
   outputRoot: 'dist',
   env: {
-    TARO_APP_API_BASE_URL: JSON.stringify(apiBaseUrl)
+    TARO_APP_API_BASE_URL: JSON.stringify(apiBaseUrl),
+    TARO_APP_VERSION: JSON.stringify(appVersion)
   },
   copy: {
     patterns: [

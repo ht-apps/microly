@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto'
 
 import {
   AnalyticsBatchRequestSchema,
+  ClientErrorBatchRequestSchema,
   FavoriteSyncRecordSchema,
   FeedbackRequestSchema,
   GuestAuthRequestSchema,
@@ -21,11 +22,13 @@ import { ZodError } from 'zod'
 
 import { registerAdminRoutes } from './admin.js'
 import { createDeepseekProvider, registerAiRoutes, type AiProvider } from './ai.js'
+import { RuntimeMetrics } from './runtime-metrics.js'
 import { createDatabase, type DatabaseContext } from './db/client.js'
 import {
   accounts,
   analyticsEvents,
   authSessions,
+  clientErrorReports,
   contentReleases,
   favoriteStates,
   feedback,
@@ -167,6 +170,7 @@ async function mergeAccounts(database: DatabaseContext, sourceId: string, target
       AND NOT EXISTS (SELECT 1 FROM training_completions target WHERE target.account_id = $2 AND target.sync_id = source.sync_id)`, [sourceId, targetId])
     await client.query('DELETE FROM training_completions WHERE account_id = $1', [sourceId])
     await client.query('UPDATE analytics_events SET account_id = $2 WHERE account_id = $1', [sourceId, targetId])
+    await client.query('UPDATE client_error_reports SET account_id = $2 WHERE account_id = $1', [sourceId, targetId])
     await client.query('UPDATE feedback SET account_id = $2 WHERE account_id = $1', [sourceId, targetId])
     await client.query(`UPDATE learning_activity_events source SET account_id = $2 WHERE source.account_id = $1
       AND NOT EXISTS (SELECT 1 FROM learning_activity_events target WHERE target.account_id = $2 AND target.event_id = source.event_id)`, [sourceId, targetId])
@@ -196,6 +200,9 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions) {
   const database = createDatabase(options.databaseUrl)
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 256 * 1024 })
+  const runtimeMetrics = new RuntimeMetrics()
+  app.addHook('onRequest', async (request) => { runtimeMetrics.start(request) })
+  app.addHook('onResponse', async (request, reply) => { runtimeMetrics.finish(request, reply) })
   const exchangeWechatCode = options.exchangeWechatCode ?? (async (code: string) => {
     if (!options.wechat) throw new Error('Wechat login is not configured')
     const query = new URLSearchParams({ appid: options.wechat.appId, secret: options.wechat.appSecret, js_code: code, grant_type: 'authorization_code' })
@@ -424,7 +431,45 @@ export function createApp(options: CreateAppOptions) {
     return reply.send({ data: { accepted } })
   })
 
-  registerAdminRoutes(app, database, options.admin, { provider: aiProvider, configured: Boolean(options.ai || options.aiProvider) })
+  app.post('/v1/client-errors/batch', async (request, reply) => {
+    const principal = await authenticate(request, reply, database)
+    if (!principal) return
+    const { reports } = ClientErrorBatchRequestSchema.parse(request.body)
+    await database.pool.query(`DELETE FROM client_error_reports WHERE received_at < now() - interval '30 days'`)
+    const existingIds = await database.pool.query('SELECT report_id FROM client_error_reports WHERE report_id = ANY($1::uuid[])', [reports.map((report) => report.reportId)])
+    const existing = new Set(existingIds.rows.map((row) => row.report_id as string))
+    const newCount = reports.filter((report) => !existing.has(report.reportId)).length
+    const rate = await database.pool.query(`SELECT count(*)::int AS count FROM client_error_reports
+      WHERE account_id = $1 AND received_at >= now() - interval '1 hour'`, [principal.accountId])
+    if (Number(rate.rows[0]?.count ?? 0) + newCount > 100) {
+      return error(reply, 429, 'client_error_rate_limited', '错误报告过于频繁，请稍后再试。')
+    }
+    const cutoff = Date.now() - 8 * 24 * 60 * 60 * 1000
+    if (reports.some((report) => Date.parse(report.occurredAt) < cutoff || isFuture(report.occurredAt))) {
+      return error(reply, 422, 'invalid_error_timestamp', '错误报告时间超出允许范围。')
+    }
+    let accepted = 0
+    for (const report of reports) {
+      const inserted = await database.db.insert(clientErrorReports).values({
+        reportId: report.reportId,
+        accountId: principal.accountId,
+        fingerprint: report.fingerprint,
+        category: report.category,
+        severity: report.severity,
+        page: report.page,
+        appVersion: report.appVersion,
+        contentVersion: report.contentVersion ?? null,
+        networkType: report.networkType,
+        errorCode: report.errorCode ?? null,
+        stackDigest: report.stackDigest ?? null,
+        occurredAt: new Date(report.occurredAt),
+      }).onConflictDoNothing({ target: clientErrorReports.reportId }).returning({ id: clientErrorReports.id })
+      accepted += inserted.length
+    }
+    return reply.send({ data: { accepted, duplicates: reports.length - accepted } })
+  })
+
+  registerAdminRoutes(app, database, options.admin, { provider: aiProvider, configured: Boolean(options.ai || options.aiProvider), runtimeMetrics })
 
   return app
 }

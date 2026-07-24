@@ -11,6 +11,8 @@ import { trainingContent } from '../../data/training-content'
 import { readLearningActivity, writeLearningActivity } from '../activity/activity-storage'
 import { readFavoriteQueue, readFavoriteSyncRecords, writeFavoriteQueue, writeFavoriteSyncRecords } from '../favorite/favorite-storage'
 import { authorizedRequest } from '../network/guest-auth'
+import { isNetworkEnabled } from '../network/network-config'
+import { captureClientError } from '../diagnostics/client-errors'
 import { readUserPreference, writeUserPreference } from '../preference/preference-storage'
 import { readReviewQueue, writeReviewQueue } from '../review/review-storage'
 import { createSecureUuid } from '../network/identifier'
@@ -116,7 +118,8 @@ export async function flushFullSync(force = false) {
     Taro.removeStorageSync(SYNC_RETRY_KEY)
     clearFullSyncPending()
     return true
-  } catch {
+  } catch (cause) {
+    if (isNetworkEnabled()) captureClientError('sync', cause, { severity: 'warning', errorCode: 'full_sync_failed' })
     const previous = Taro.getStorageSync<{ attempts?: number }>(SYNC_RETRY_KEY)
     const attempts = Math.min((previous?.attempts ?? 0) + 1, 10)
     const delay = Math.min(5 * 60_000, 2 ** (attempts - 1) * 2_000)

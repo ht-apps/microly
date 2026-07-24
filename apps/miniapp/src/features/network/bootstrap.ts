@@ -9,6 +9,7 @@ import {
   restoreServerCompletions,
 } from '../sync/completion-sync'
 import { flushFullSync } from '../sync/state-sync'
+import { flushClientErrors } from '../diagnostics/client-errors'
 
 export function initializeLocalNetworkState() {
   initializeTrainingContentFromCache()
@@ -16,6 +17,7 @@ export function initializeLocalNetworkState() {
 
 export async function bootstrapNetworkFeatures() {
   trackEvent('app_open', { source: 'direct' })
+  await flushClientErrors()
   await refreshTrainingContent()
   await flushCompletionOutbox()
   await restoreServerCompletions(trainingContent.sessions)

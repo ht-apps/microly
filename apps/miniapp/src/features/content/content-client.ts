@@ -8,6 +8,7 @@ import {
 import Taro from '@tarojs/taro'
 
 import { getApiBaseUrl, isNetworkEnabled } from '../network/network-config'
+import { captureClientError } from '../diagnostics/client-errors'
 
 export const CONTENT_CACHE_STORAGE_KEY = 'microly:content-cache:v1'
 export const CONTENT_UPDATED_EVENT = 'microly:content-updated'
@@ -61,16 +62,20 @@ export async function refreshTrainingContent() {
       timeout: 8000,
     })
     if (response.statusCode === 304) return false
-    if (response.statusCode < 200 || response.statusCode >= 300) return false
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      if (response.statusCode >= 500) captureClientError('content', null, { severity: 'warning', errorCode: `http_${response.statusCode}` })
+      return false
+    }
     const parsed = ContentResponseSchema.safeParse(response.data)
-    if (!parsed.success) return false
+    if (!parsed.success) { captureClientError('content', null, { errorCode: 'invalid_content_response' }); return false }
     const { bundle, checksum } = parsed.data.data
     if (bundle.releaseVersion < currentTrainingContentBundle.releaseVersion) return false
     if (!setTrainingContentBundle(bundle)) return false
     Taro.setStorageSync(CONTENT_CACHE_STORAGE_KEY, { bundle, checksum })
     Taro.eventCenter.trigger(CONTENT_UPDATED_EVENT, bundle.releaseVersion)
     return true
-  } catch {
+  } catch (cause) {
+    captureClientError('content', cause, { severity: 'warning', errorCode: 'content_request_failed' })
     return false
   }
 }

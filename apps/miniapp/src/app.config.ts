@@ -14,7 +14,8 @@ export default defineAppConfig({
     'pages/ai-info/index',
     'pages/weekly-report/index',
     'pages/agreement/index',
-    'pages/feedback/index'
+    'pages/feedback/index',
+    'pages/diagnostics/index'
   ],
   tabBar: {
     color: '#7e8290',

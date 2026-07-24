@@ -265,6 +265,30 @@ export const FeedbackResponseSchema = z.object({
   data: z.object({ feedbackId: z.uuid(), status: z.literal('new') }),
 })
 
+export const ClientErrorCategorySchema = z.enum(['runtime', 'unhandled_rejection', 'api', 'content', 'sync', 'ai'])
+export const ClientErrorSeveritySchema = z.enum(['warning', 'error', 'fatal'])
+export const ClientNetworkTypeSchema = z.enum(['wifi', '2g', '3g', '4g', '5g', 'none', 'unknown'])
+export const ClientErrorReportSchema = z.object({
+  reportId: z.uuid(),
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  category: ClientErrorCategorySchema,
+  severity: ClientErrorSeveritySchema,
+  page: z.string().regex(/^\/[a-z0-9/_-]*$/).max(120),
+  appVersion: z.string().regex(/^[a-zA-Z0-9._-]+$/).max(40),
+  contentVersion: ContentVersionSchema.nullable().optional(),
+  networkType: ClientNetworkTypeSchema,
+  errorCode: z.string().regex(/^[a-z0-9_.:-]+$/).max(80).nullable().optional(),
+  stackDigest: z.string().regex(/^[a-f0-9]{64}$/).nullable().optional(),
+  occurredAt: IsoTimeSchema,
+}).strict()
+export const ClientErrorBatchRequestSchema = z.object({
+  reports: z.array(ClientErrorReportSchema).min(1).max(20),
+}).strict()
+export const ClientErrorBatchResponseSchema = z.object({ data: z.object({
+  accepted: z.number().int().nonnegative(),
+  duplicates: z.number().int().nonnegative(),
+}).strict() }).strict()
+
 export const AiEvaluationStatusSchema = z.enum([
   'queued', 'processing', 'succeeded', 'degraded', 'blocked', 'canceled',
 ])
@@ -406,6 +430,7 @@ export const AdminAiMetricsResponseSchema = z.object({ data: z.object({
 
 export const AdminFeedbackStatusSchema = z.enum(['new', 'in_progress', 'resolved', 'dismissed'])
 export const AdminDraftStatusSchema = z.enum(['draft', 'published', 'abandoned'])
+export const AdminClientErrorStatusSchema = z.enum(['new', 'in_progress', 'resolved'])
 
 export const AdminDraftCreateRequestSchema = z.object({
   baseReleaseVersion: ContentVersionSchema.optional(),
@@ -568,6 +593,57 @@ export const AdminFeedbackListResponseSchema = z.object({
 
 export const AdminFeedbackResponseSchema = z.object({ data: AdminFeedbackSchema }).strict()
 
+export const AdminOperationsIssueSchema = z.object({
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  category: ClientErrorCategorySchema,
+  severity: ClientErrorSeveritySchema,
+  page: z.string(),
+  errorCode: z.string().nullable(),
+  count: z.number().int().nonnegative(),
+  affectedAccounts: z.number().int().nonnegative(),
+  firstSeenAt: IsoTimeSchema,
+  lastSeenAt: IsoTimeSchema,
+  status: AdminClientErrorStatusSchema,
+  internalNote: z.string().nullable(),
+}).strict()
+export const AdminOperationsResponseSchema = z.object({ data: z.object({
+  window: z.enum(['1h', '24h', '7d']),
+  generatedAt: IsoTimeSchema,
+  services: z.object({
+    process: z.literal('ok'),
+    database: z.enum(['ok', 'unavailable']),
+    ai: z.enum(['ok', 'disabled', 'unavailable']),
+    content: z.enum(['ok', 'unavailable']),
+    currentContentVersion: ContentVersionSchema.nullable(),
+    activeModelId: z.string().nullable(),
+  }).strict(),
+  summary: z.object({
+    total: z.number().int().nonnegative(),
+    unresolved: z.number().int().nonnegative(),
+    affectedAccounts: z.number().int().nonnegative(),
+    level: z.enum(['normal', 'attention', 'critical']),
+  }).strict(),
+  api: z.object({
+    requests: z.number().int().nonnegative(),
+    errorRate: z.number().min(0).max(1),
+    latencyP50: z.number().nonnegative().nullable(),
+    latencyP95: z.number().nonnegative().nullable(),
+  }).strict(),
+  daily: z.array(z.object({ time: z.string(), warnings: z.number().int().nonnegative(), errors: z.number().int().nonnegative(), fatals: z.number().int().nonnegative() }).strict()),
+  pages: z.array(z.object({ page: z.string(), count: z.number().int().nonnegative() }).strict()).max(10),
+  versions: z.array(z.object({ appVersion: z.string(), count: z.number().int().nonnegative() }).strict()).max(10),
+  issues: z.array(AdminOperationsIssueSchema).max(100),
+}).strict() }).strict()
+export const AdminClientErrorUpdateRequestSchema = z.object({
+  status: AdminClientErrorStatusSchema,
+  internalNote: z.string().trim().max(500).nullable().optional(),
+}).strict()
+export const AdminClientErrorUpdateResponseSchema = z.object({ data: z.object({
+  fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+  status: AdminClientErrorStatusSchema,
+  internalNote: z.string().nullable(),
+}).strict() }).strict()
+
 export type TrainingCompletion = z.infer<typeof TrainingCompletionSchema>
 export type AnalyticsEvent = z.infer<typeof AnalyticsEventSchema>
 export type AnalyticsBatchRequest = z.infer<typeof AnalyticsBatchRequestSchema>
@@ -580,6 +656,7 @@ export type LearningActivitySyncRecord = z.infer<typeof LearningActivitySyncReco
 export type SyncRequest = z.infer<typeof SyncRequestSchema>
 export type SyncSnapshot = z.infer<typeof SyncSnapshotSchema>
 export type FeedbackRequest = z.infer<typeof FeedbackRequestSchema>
+export type ClientErrorReport = z.infer<typeof ClientErrorReportSchema>
 export type AiEvaluationResult = z.infer<typeof AiEvaluationResultSchema>
 export type AiEvaluation = z.infer<typeof AiEvaluationSchema>
 export type AiEvaluationCreateRequest = z.infer<typeof AiEvaluationCreateRequestSchema>
@@ -594,3 +671,4 @@ export type AdminMetrics = z.infer<typeof AdminMetricsResponseSchema>['data']
 export type AdminContentIndex = z.infer<typeof AdminContentIndexResponseSchema>['data']
 export type AdminDraftValidation = z.infer<typeof AdminDraftValidationResponseSchema>['data']
 export type AdminFeedbackList = z.infer<typeof AdminFeedbackListResponseSchema>['data']
+export type AdminOperations = z.infer<typeof AdminOperationsResponseSchema>['data']

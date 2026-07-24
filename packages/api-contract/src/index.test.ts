@@ -15,6 +15,8 @@ import {
   AdminPublishRequestSchema,
   AdminPublishResponseSchema,
   AnalyticsBatchRequestSchema,
+  ClientErrorBatchRequestSchema,
+  AdminOperationsResponseSchema,
   SyncRequestSchema,
   TrainingCompletionSchema,
 } from './index'
@@ -44,6 +46,32 @@ describe('API contract', () => {
         properties: { ...event.properties, practiceText: '不应上传的原文' },
       }],
     }).success).toBe(false)
+  })
+
+  it('错误报告只接受受限运行上下文', () => {
+    const report = {
+      reportId: '71111111-1111-4111-8111-111111111111', fingerprint: 'a'.repeat(64),
+      category: 'runtime', severity: 'error', page: '/pages/training/index', appVersion: '1.0.0',
+      contentVersion: 2, networkType: 'wifi', errorCode: 'typeerror', stackDigest: null,
+      occurredAt: '2026-07-23T10:00:00.000Z',
+    }
+    expect(ClientErrorBatchRequestSchema.safeParse({ reports: [report] }).success).toBe(true)
+    expect(ClientErrorBatchRequestSchema.safeParse({ reports: [{ ...report, practiceText: '绝不能上传的原文' }] }).success).toBe(false)
+    expect(ClientErrorBatchRequestSchema.safeParse({ reports: Array(21).fill(report) }).success).toBe(false)
+  })
+
+  it('运行保障响应不允许账号明细或错误正文', () => {
+    const value = { data: {
+      window: '24h', generatedAt: '2026-07-23T10:00:00.000Z',
+      services: { process: 'ok', database: 'ok', ai: 'disabled', content: 'ok', currentContentVersion: 2, activeModelId: null },
+      summary: { total: 1, unresolved: 1, affectedAccounts: 1, level: 'normal' },
+      api: { requests: 10, errorRate: 0, latencyP50: 12, latencyP95: 30 },
+      daily: [], pages: [], versions: [],
+      issues: [{ fingerprint: 'b'.repeat(64), category: 'runtime', severity: 'error', page: '/pages/training/index', errorCode: 'typeerror', count: 1, affectedAccounts: 1, firstSeenAt: '2026-07-23T10:00:00.000Z', lastSeenAt: '2026-07-23T10:00:00.000Z', status: 'new', internalNote: null }],
+    } }
+    expect(AdminOperationsResponseSchema.safeParse(value).success).toBe(true)
+    expect(AdminOperationsResponseSchema.safeParse({ ...value, data: { ...value.data, accountId: '11111111-1111-4111-8111-111111111111' } }).success).toBe(false)
+    expect(AdminOperationsResponseSchema.safeParse({ ...value, data: { ...value.data, issues: [{ ...value.data.issues[0], message: '原始错误正文' }] } }).success).toBe(false)
   })
 
   it('拒绝完成时间早于开始时间', () => {

@@ -19,6 +19,7 @@ export const queryKeys = {
   release: (version: number) => ['admin', 'release', version] as const,
   aiConfig: ['admin', 'ai-config'] as const,
   aiMetrics: (window: '7d' | '30d') => ['admin', 'ai-metrics', window] as const,
+  operations: (window: '1h' | '24h' | '7d') => ['admin', 'operations', window] as const,
   draft: (id: string) => ['admin', 'draft', id] as const,
   feedback: (filters: { status?: string; category?: string; page: number; pageSize: number }) =>
     ['admin', 'feedback', filters] as const,

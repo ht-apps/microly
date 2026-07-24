@@ -395,6 +395,34 @@ describe('network MVP API', () => {
     expect(JSON.stringify(metrics.json())).not.toContain(guest.json().data.accountId)
   })
 
+  it('幂等接收隐私安全错误并由后台聚合处理', async () => {
+    const report = {
+      reportId: '70000000-0000-4000-8000-000000000001', fingerprint: 'a'.repeat(64),
+      category: 'runtime', severity: 'error', page: '/pages/training/index', appVersion: '1.0.0',
+      contentVersion: 1, networkType: 'wifi', errorCode: 'typeerror', stackDigest: null,
+      occurredAt: new Date(Date.now() - 1_000).toISOString(),
+    }
+    const first = await app.inject({ method: 'POST', url: '/v1/client-errors/batch', headers: { authorization }, payload: { reports: [report] } })
+    const repeated = await app.inject({ method: 'POST', url: '/v1/client-errors/batch', headers: { authorization }, payload: { reports: [report] } })
+    expect(first.statusCode, first.body).toBe(200)
+    expect(first.json().data).toEqual({ accepted: 1, duplicates: 0 })
+    expect(repeated.json().data).toEqual({ accepted: 0, duplicates: 1 })
+    const rows = await database.pool.query('SELECT * FROM client_error_reports WHERE report_id=$1', [report.reportId])
+    expect(rows.rowCount).toBe(1)
+    expect(JSON.stringify(rows.rows[0])).not.toContain('practiceText')
+
+    const operations = await app.inject({ method: 'GET', url: '/v1/admin/operations?window=24h', headers: { authorization: adminAuthorization } })
+    expect(operations.statusCode, operations.body).toBe(200)
+    expect(operations.json().data.issues[0].fingerprint).toBe(report.fingerprint)
+    expect(JSON.stringify(operations.json())).not.toContain(authorization)
+    const updated = await app.inject({
+      method: 'PATCH', url: `/v1/admin/operations/errors/${report.fingerprint}`,
+      headers: { authorization: adminAuthorization }, payload: { status: 'resolved', internalNote: '已确认并修复' },
+    })
+    expect(updated.statusCode, updated.body).toBe(200)
+    expect(updated.json().data.status).toBe('resolved')
+  })
+
   it('幂等合并安全学习状态', async () => {
     const session = trainingContentBundle.sessions['boundary-decline-001']
     const choice = session?.cards.find((card) => card.type === 'choice')

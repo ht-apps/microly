@@ -1,0 +1,67 @@
+.diagnostics-page {
+  min-height: 100vh;
+  padding: 32px 30px 72px;
+  box-sizing: border-box;
+  background: #fffaf2;
+}
+
+.diagnostics-intro,
+.diagnostics-card {
+  padding: 28px;
+  background: #fff;
+  border: 1px solid rgba(91, 91, 214, 0.1);
+  border-radius: 26px;
+}
+
+.diagnostics-title,
+.diagnostics-copy {
+  display: block;
+}
+
+.diagnostics-title {
+  color: #202a43;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.diagnostics-copy {
+  margin-top: 12px;
+  color: #737787;
+  font-size: 22px;
+  line-height: 1.65;
+}
+
+.diagnostics-card {
+  margin-top: 22px;
+}
+
+.diagnostics-row {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid #eeeae4;
+  color: #737787;
+  font-size: 22px;
+}
+
+.diagnostics-row:last-child {
+  border-bottom: 0;
+}
+
+.diagnostics-row text:last-child {
+  min-width: 0;
+  color: #293148;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.diagnostics-action {
+  margin-top: 22px;
+  color: #5b5bd6;
+  background: #eeedff;
+  border-radius: 999px;
+  font-size: 24px;
+  line-height: 72px;
+}
