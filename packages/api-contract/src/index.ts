@@ -1,4 +1,4 @@
-import { ReviewVariantSchema, TrainingContentBundleSchema } from '@microly/content-schema'
+import { ReviewVariantSchema, TrainingContentBundleSchema, TrainingSessionSchema } from '@microly/content-schema'
 import { z } from 'zod'
 
 const IsoTimeSchema = z.iso.datetime({ offset: true })
@@ -425,6 +425,18 @@ export const AdminAiMetricsResponseSchema = z.object({ data: z.object({
     promptTokens: z.number().int().nonnegative(),
     completionTokens: z.number().int().nonnegative(),
     estimatedCostUsd: z.number().nonnegative(),
+    operations: z.array(z.object({
+      operation: z.enum(['review_variants', 'session_outlines', 'training_sessions']),
+      total: z.number().int().nonnegative(),
+      succeeded: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      formatRetryRate: z.number().min(0).max(1),
+      latencyP50: z.number().nonnegative().nullable(),
+      latencyP95: z.number().nonnegative().nullable(),
+      promptTokens: z.number().int().nonnegative(),
+      completionTokens: z.number().int().nonnegative(),
+      estimatedCostUsd: z.number().nonnegative(),
+    }).strict()),
   }).strict(),
 }).strict() }).strict()
 
@@ -464,6 +476,119 @@ export const AdminReviewVariantGenerateResponseSchema = z.object({ data: z.objec
   candidates: z.array(ReviewVariantSchema).min(1).max(3),
   model: z.object({ modelId: z.string().min(1), configRevision: z.number().int().positive(), promptVersion: z.literal('review-variant-v1') }).strict(),
   warnings: z.array(z.string().max(200)),
+}).strict() }).strict()
+
+export const AdminSessionOutlineSchema = z.object({
+  outlineId: z.uuid(),
+  title: z.string().trim().min(1).max(50),
+  objective: z.string().trim().min(1).max(120),
+  difficulty: z.enum(['L1', 'L2', 'L3']),
+  riskLevel: z.enum(['low', 'medium']),
+  scenarioAngle: z.string().trim().min(10).max(160),
+  reviewFocus: z.string().trim().min(3).max(100),
+}).strict()
+
+export const AdminContentGenerationJobStatusSchema = z.enum(['queued', 'processing', 'succeeded', 'failed', 'canceled'])
+export const AdminOutlineGenerateRequestSchema = z.object({
+  requestId: z.uuid(),
+  revision: z.number().int().positive(),
+  count: z.number().int().min(1).max(5),
+  difficulties: z.array(z.enum(['L1', 'L2', 'L3'])).min(1).max(5),
+  brief: z.string().trim().min(10).max(500),
+}).strict().refine((value) => value.difficulties.length === value.count, {
+  message: '难度数量必须与候选数量一致。', path: ['difficulties'],
+})
+export const AdminSessionGenerateRequestSchema = z.object({
+  requestId: z.uuid(),
+  revision: z.number().int().positive(),
+  outlineJobId: z.uuid(),
+  outlineIds: z.array(z.uuid()).min(1).max(5),
+  outlines: z.array(AdminSessionOutlineSchema).min(1).max(5).optional(),
+  reviewVariantCount: z.literal(2).default(2),
+}).strict().refine((value) => !value.outlines || (
+  value.outlines.length === value.outlineIds.length
+  && value.outlines.every((outline) => value.outlineIds.includes(outline.outlineId))
+), { message: '编辑后的大纲必须与所选大纲一致。', path: ['outlines'] })
+export const AdminGenerationJobInsertRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  candidateIds: z.array(z.uuid()).min(1).max(5),
+}).strict()
+export const AdminContentGenerationJobSchema = z.object({
+  id: z.uuid(),
+  requestId: z.uuid(),
+  draftId: z.uuid(),
+  catalogId: SessionIdSchema,
+  draftRevision: z.number().int().positive(),
+  operation: z.enum(['session_outlines', 'training_sessions']),
+  status: AdminContentGenerationJobStatusSchema,
+  requestedCount: z.number().int().min(1).max(5),
+  parameters: z.object({
+    difficulties: z.array(z.enum(['L1', 'L2', 'L3'])).max(5),
+    brief: z.string().max(500).nullable(),
+    outlineJobId: z.uuid().nullable(),
+    outlineIds: z.array(z.uuid()).max(5),
+  }).strict(),
+  outlines: z.array(AdminSessionOutlineSchema).max(5),
+  candidates: z.array(z.object({ candidateId: z.uuid(), session: TrainingSessionSchema }).strict()).max(5),
+  insertedCandidateIds: z.array(z.uuid()).max(5),
+  model: z.object({ modelId: z.string().min(1), configRevision: z.number().int().positive(), promptVersion: z.string().min(1).max(80) }).strict().nullable(),
+  promptTokens: z.number().int().nonnegative(),
+  completionTokens: z.number().int().nonnegative(),
+  estimatedCostUsd: z.number().nonnegative(),
+  latencyMs: z.number().int().nonnegative().nullable(),
+  formatRetries: z.number().int().nonnegative(),
+  failureCode: z.string().max(80).nullable(),
+  createdAt: IsoTimeSchema,
+  startedAt: IsoTimeSchema.nullable(),
+  completedAt: IsoTimeSchema.nullable(),
+}).strict()
+export const AdminContentGenerationJobResponseSchema = z.object({ data: AdminContentGenerationJobSchema }).strict()
+export const AdminContentGenerationJobListResponseSchema = z.object({ data: z.object({ items: z.array(AdminContentGenerationJobSchema).max(100) }).strict() }).strict()
+
+export const AdminContentReviewChecklistSchema = z.object({
+  objectiveAligned: z.literal(true),
+  optionQuality: z.literal(true),
+  feedbackBalanced: z.literal(true),
+  principleConsistent: z.literal(true),
+  practiceRubric: z.literal(true),
+  safetyAndPrivacy: z.literal(true),
+  mobilePreview: z.literal(true),
+}).strict()
+export const AdminContentReviewUpdateRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  checklist: AdminContentReviewChecklistSchema,
+  operatorLabel: z.string().trim().min(2).max(50),
+  reviewerLabel: z.string().trim().min(2).max(50).nullable().optional(),
+  note: z.string().trim().max(500).nullable().optional(),
+}).strict()
+export const AdminContentReviewSchema = z.object({
+  sessionId: SessionIdSchema,
+  contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  currentDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  current: z.boolean(),
+  riskLevel: z.enum(['low', 'medium', 'high']),
+  checklist: AdminContentReviewChecklistSchema,
+  operatorLabel: z.string(),
+  reviewerLabel: z.string().nullable(),
+  note: z.string().nullable(),
+  reviewedAt: IsoTimeSchema,
+}).strict()
+export const AdminContentReviewResponseSchema = z.object({ data: AdminContentReviewSchema }).strict()
+export const AdminContentReviewListResponseSchema = z.object({ data: z.object({ items: z.array(AdminContentReviewSchema) }).strict() }).strict()
+const AdminReadinessIssueSchema = z.object({ path: z.string(), message: z.string(), severity: z.enum(['error', 'warning']) }).strict()
+export const AdminContentReadinessResponseSchema = z.object({ data: z.object({
+  totalSessions: z.number().int().nonnegative(),
+  targetSessions: z.literal(30),
+  targetMet: z.boolean(),
+  catalogs: z.array(z.object({ catalogId: SessionIdSchema, title: z.string(), count: z.number().int().nonnegative(), target: z.number().int().positive() }).strict()),
+  difficulty: z.record(z.enum(['L1', 'L2', 'L3', 'L4']), z.number().int().nonnegative()),
+  missingVariants: z.array(SessionIdSchema),
+  changedSessions: z.array(SessionIdSchema),
+  unreviewedSessions: z.array(SessionIdSchema),
+  sessionDigests: z.record(SessionIdSchema, z.string().regex(/^[a-f0-9]{64}$/)),
+  blockingIssues: z.array(AdminReadinessIssueSchema),
+  warnings: z.array(AdminReadinessIssueSchema),
 }).strict() }).strict()
 
 export const AdminFeedbackUpdateRequestSchema = z.object({
@@ -663,6 +788,10 @@ export type AiEvaluationCreateRequest = z.infer<typeof AiEvaluationCreateRequest
 export type AdminAiModelConfig = z.infer<typeof AdminAiModelConfigSchema>
 export type AdminAiMetrics = z.infer<typeof AdminAiMetricsResponseSchema>['data']
 export type AdminReviewVariantGenerate = z.infer<typeof AdminReviewVariantGenerateResponseSchema>['data']
+export type AdminSessionOutline = z.infer<typeof AdminSessionOutlineSchema>
+export type AdminContentGenerationJob = z.infer<typeof AdminContentGenerationJobSchema>
+export type AdminContentReview = z.infer<typeof AdminContentReviewSchema>
+export type AdminContentReadiness = z.infer<typeof AdminContentReadinessResponseSchema>['data']
 export type AdminContentDraft = z.infer<typeof AdminContentDraftSchema>
 export type AdminContentRelease = z.infer<typeof AdminContentReleaseSchema>
 export type AdminContentReleaseSnapshot = z.infer<typeof AdminContentReleaseSnapshotResponseSchema>['data']

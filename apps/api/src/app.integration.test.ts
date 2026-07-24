@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 
-import { trainingContentBundle } from '@microly/training-content'
+import { TrainingSessionSchema } from '@microly/content-schema'
+import { remoteTrainingContentBundle, trainingContentBundle } from '@microly/training-content'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { createApp } from './app.js'
@@ -15,6 +16,7 @@ if (!databaseUrl.includes('microly_test')) {
 
 const database = createDatabase(databaseUrl)
 let reviewGenerationMaxTokens = 0
+let trainingGenerationIssues = ''
 const app = createApp({
   databaseUrl,
   admin: { token: 'admin-token-with-at-least-32-characters', origins: ['http://localhost:5173'] },
@@ -49,6 +51,59 @@ const app = createApp({
         formatRetries: 0,
       }
     },
+    generateSessionOutlines: async ({ count, difficulties, config }) => ({
+      value: { outlines: Array.from({ length: count }, (_, index) => ({
+        outlineId: `81111111-1111-4111-8111-${String(index + 1).padStart(12, '0')}`,
+        title: `集成测试训练 ${index + 1}`,
+        objective: `练习在匿名协作限制变化时说明事实并确认下一步 ${index + 1}`,
+        difficulty: difficulties[index]!, riskLevel: 'low',
+        scenarioAngle: `第 ${index + 1} 个匿名跨团队协作场景，包含时间变化、资源限制和需要确认的责任边界。`,
+        reviewFocus: '复习事实、限制与下一步确认',
+      })) },
+      modelId: config.modelId,
+      usage: { promptTokens: 80, cacheHitTokens: 0, cacheMissTokens: 80, completionTokens: 120 },
+      formatRetries: 0,
+    }),
+    generateTrainingSessions: async ({ catalog, outlines, config }) => ({
+      value: { sessions: outlines.map((outline, index) => {
+        const source = structuredClone(remoteTrainingContentBundle.sessions['boundary-decline-001']!)
+        const sessionId = `generated-integration-${index + 1}`
+        source.sessionId = sessionId
+        source.skill = catalog.skill
+        source.title = outline.title
+        source.objective = outline.objective
+        source.difficulty = outline.difficulty
+        source.riskLevel = outline.riskLevel
+        const scenario = source.cards.find((card) => card.type === 'scenario')!
+        scenario.title = '依赖变化后重新确认交付边界'
+        scenario.context = `${outline.scenarioAngle}双方需要在不评价个人的前提下确认可执行方案和下一次同步节点。`
+        scenario.question = '你会如何说明变化并确认共同下一步？'
+        const choice = source.cards.find((card) => card.type === 'choice')!
+        choice.options.forEach((option, optionIndex) => { option.text = `集成候选 ${index + 1}-${optionIndex + 1}：说明限制并提出不同程度的下一步。` })
+        const principle = source.cards.find((card) => card.type === 'principle')!
+        principle.summary = '先说明客观变化，再确认影响和双方可以执行的下一步。'
+        principle.formula = '变化事实 + 影响范围 + 下一步确认'
+        principle.example = '依赖条件已经变化，我会先完成可验证部分，再请你确认剩余范围的时间。'
+        const practice = source.cards.find((card) => card.type === 'practice')!
+        practice.prompt = '请写一句匿名表达，说明协作条件变化并确认下一步。'
+        practice.referenceAnswer = '当前依赖条件已经变化，我可以先交付核心部分，剩余范围请一起确认时间。'
+        const completion = source.cards.find((card) => card.type === 'completion')!
+        completion.summary = '用事实和下一步管理协作变化。'
+        completion.takeaway = '条件变化时，重新确认范围、影响和下一步。'
+        source.reviewVariants = [1, 2].map((number) => ({
+          variantId: `${sessionId}-review-${number}`, title: `集成复习情境 ${number}`,
+          context: `匿名协作条件第 ${number} 次变化，需要重新确认优先级、交付范围和下一步安排，同时避免使用真实人员、公司和项目资料。`,
+          question: '这次你会如何回应？', prompt: '选择更能推动共同确认的一句话',
+          options: choice.options.map((option, optionIndex) => ({ ...structuredClone(option), id: `${sessionId}-review-${number}-${optionIndex + 1}`, text: `${option.text}（复习 ${number}）` })),
+        }))
+        const parsed = TrainingSessionSchema.safeParse(source)
+        if (!parsed.success) trainingGenerationIssues = JSON.stringify(parsed.error.issues)
+        return source
+      }) },
+      modelId: config.modelId,
+      usage: { promptTokens: 200, cacheHitTokens: 0, cacheMissTokens: 200, completionTokens: 500 },
+      formatRetries: 0,
+    }),
   },
 })
 let authorization = ''
@@ -236,7 +291,7 @@ describe('network MVP API', () => {
     const releasePreview = await app.inject({ method: 'GET', url: '/v1/admin/content/releases/1', headers: { authorization: adminAuthorization } })
     expect(releasePreview.statusCode).toBe(200)
     expect(releasePreview.json().data.bundle.releaseVersion).toBe(1)
-    expect(releasePreview.json().data.sessionCount).toBe(10)
+    expect(releasePreview.json().data.sessionCount).toBe(30)
     const missingRelease = await app.inject({ method: 'GET', url: '/v1/admin/content/releases/9999', headers: { authorization: adminAuthorization } })
     expect(missingRelease.statusCode).toBe(404)
 
@@ -251,7 +306,7 @@ describe('network MVP API', () => {
     expect(generated.json().data.candidates).toHaveLength(2)
     expect(reviewGenerationMaxTokens).toBeGreaterThanOrEqual(1200)
     const unchangedDraft = await app.inject({ method: 'GET', url: `/v1/admin/content/drafts/${draft.id}`, headers: { authorization: adminAuthorization } })
-    expect(unchangedDraft.json().data.bundle.sessions['boundary-decline-001'].reviewVariants ?? []).toHaveLength(0)
+    expect(unchangedDraft.json().data.bundle.sessions['boundary-decline-001'].reviewVariants ?? []).toHaveLength(2)
     expect((await database.pool.query("SELECT count(*)::int count FROM admin_ai_generation_runs WHERE operation='review_variants'")).rows[0].count).toBe(1)
     draft.bundle.sessions['boundary-decline-001'].title = '说明边界并协商优先级'
     const saved = await app.inject({
@@ -267,9 +322,25 @@ describe('network MVP API', () => {
     expect(stale.statusCode).toBe(409)
     expect(stale.json().error.code).toBe('draft_conflict')
     const validation = await app.inject({ method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/validate`, headers: { authorization: adminAuthorization } })
-    expect(validation.json().data.valid).toBe(true)
+    expect(validation.json().data.valid, validation.body).toBe(true)
     expect(validation.json().data.normalizedBundle.releaseVersion).toBe(2)
     expect(validation.json().data.normalizedBundle.sessions['boundary-decline-001'].contentVersion).toBe(2)
+    const reviewRequired = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/publish`, headers: { authorization: adminAuthorization },
+      payload: { revision: 2, reason: '验证未审核内容阻断' },
+    })
+    expect(reviewRequired.statusCode).toBe(422)
+    expect(reviewRequired.json().error.code).toBe('content_review_required')
+    const readiness = await app.inject({ method: 'GET', url: `/v1/admin/content/drafts/${draft.id}/readiness`, headers: { authorization: adminAuthorization } })
+    const reviewed = await app.inject({
+      method: 'PUT', url: `/v1/admin/content/drafts/${draft.id}/sessions/boundary-decline-001/review`,
+      headers: { authorization: adminAuthorization }, payload: {
+        revision: 2, contentDigest: readiness.json().data.sessionDigests['boundary-decline-001'],
+        checklist: { objectiveAligned: true, optionQuality: true, feedbackBalanced: true, principleConsistent: true, practiceRubric: true, safetyAndPrivacy: true, mobilePreview: true },
+        operatorLabel: '集成测试运营', reviewerLabel: null, note: '完成七项检查',
+      },
+    })
+    expect(reviewed.statusCode, reviewed.body).toBe(200)
     const published = await app.inject({
       method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/publish`, headers: { authorization: adminAuthorization },
       payload: { revision: 2, reason: '验证内容发布闭环' },
@@ -285,7 +356,7 @@ describe('network MVP API', () => {
     expect(publishedRetry.json().data).toEqual(published.json().data)
     const releases = await app.inject({ method: 'GET', url: '/v1/admin/content/releases', headers: { authorization: adminAuthorization } })
     expect(releases.statusCode).toBe(200)
-    expect(releases.json().data.releases[0].sessionCount).toBe(10)
+    expect(releases.json().data.releases[0].sessionCount).toBe(30)
 
     const rollback = await app.inject({ method: 'POST', url: '/v1/admin/content/releases/1/rollback-draft', headers: { authorization: adminAuthorization } })
     expect(rollback.statusCode).toBe(201)
@@ -356,6 +427,58 @@ describe('network MVP API', () => {
     })))
     expect(concurrent.map((response) => response.statusCode)).toEqual([201, 201])
     expect(concurrent.map((response) => response.json().data.releaseVersion).sort()).toEqual([4, 5])
+  })
+
+  it('异步生成大纲和完整训练，只有人工选择后才原子插入草稿', async () => {
+    const draftResponse = await app.inject({ method: 'POST', url: '/v1/admin/content/drafts', headers: { authorization: adminAuthorization }, payload: {} })
+    const draft = draftResponse.json().data
+    const outlineCreated = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/catalogs/clear-reporting/session-outlines/generate`,
+      headers: { authorization: adminAuthorization }, payload: {
+        requestId: '91111111-1111-4111-8111-111111111111', revision: draft.revision,
+        count: 1, difficulties: ['L2'], brief: '生成匿名的依赖决策训练，不包含真实人员、公司或机密信息。',
+      },
+    })
+    expect(outlineCreated.statusCode, outlineCreated.body).toBe(202)
+    let outlineJob = outlineCreated.json().data
+    for (let index = 0; index < 30 && ['queued', 'processing'].includes(outlineJob.status); index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      outlineJob = (await app.inject({ method: 'GET', url: `/v1/admin/content/generation-jobs/${outlineJob.id}`, headers: { authorization: adminAuthorization } })).json().data
+    }
+    expect(outlineJob.status, JSON.stringify(outlineJob)).toBe('succeeded')
+    expect(outlineJob.outlines).toHaveLength(1)
+    const editedOutline = { ...outlineJob.outlines[0], title: '人工确认后的依赖决策' }
+    const sessionCreated = await app.inject({
+      method: 'POST', url: `/v1/admin/content/drafts/${draft.id}/sessions/generate`, headers: { authorization: adminAuthorization },
+      payload: {
+        requestId: 'a1111111-1111-4111-8111-111111111111', revision: draft.revision,
+        outlineJobId: outlineJob.id, outlineIds: [editedOutline.outlineId], outlines: [editedOutline], reviewVariantCount: 2,
+      },
+    })
+    expect(sessionCreated.statusCode, sessionCreated.body).toBe(202)
+    let sessionJob = sessionCreated.json().data
+    for (let index = 0; index < 30 && ['queued', 'processing'].includes(sessionJob.status); index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      sessionJob = (await app.inject({ method: 'GET', url: `/v1/admin/content/generation-jobs/${sessionJob.id}`, headers: { authorization: adminAuthorization } })).json().data
+    }
+    expect(sessionJob.status, `${JSON.stringify(sessionJob)} ${trainingGenerationIssues}`).toBe('succeeded')
+    expect(sessionJob.candidates).toHaveLength(1)
+    const beforeInsert = await app.inject({ method: 'GET', url: `/v1/admin/content/drafts/${draft.id}`, headers: { authorization: adminAuthorization } })
+    expect(beforeInsert.json().data.bundle.sessions['generated-integration-1']).toBeUndefined()
+    const inserted = await app.inject({
+      method: 'POST', url: `/v1/admin/content/generation-jobs/${sessionJob.id}/insert`, headers: { authorization: adminAuthorization },
+      payload: { revision: draft.revision, candidateIds: [sessionJob.candidates[0].candidateId] },
+    })
+    expect(inserted.statusCode, inserted.body).toBe(200)
+    expect(inserted.json().data.bundle.sessions['generated-integration-1'].reviewVariants).toHaveLength(2)
+    const insertedJob = await app.inject({ method: 'GET', url: `/v1/admin/content/generation-jobs/${sessionJob.id}`, headers: { authorization: adminAuthorization } })
+    expect(insertedJob.json().data.insertedCandidateIds).toEqual([sessionJob.candidates[0].candidateId])
+    const repeatedInsert = await app.inject({
+      method: 'POST', url: `/v1/admin/content/generation-jobs/${sessionJob.id}/insert`, headers: { authorization: adminAuthorization },
+      payload: { revision: draft.revision, candidateIds: [sessionJob.candidates[0].candidateId] },
+    })
+    expect(repeatedInsert.statusCode).toBe(200)
+    expect(Object.keys(repeatedInsert.json().data.bundle.sessions).filter((id) => id === 'generated-integration-1')).toHaveLength(1)
   })
 
   it('处理反馈并返回聚合漏斗，不暴露账号标识', async () => {

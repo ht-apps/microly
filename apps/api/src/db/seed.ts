@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { TrainingContentBundleSchema } from '@microly/content-schema'
-import { trainingContentBundle } from '@microly/training-content'
+import { remoteTrainingContentBundle } from '@microly/training-content'
 import { sql } from 'drizzle-orm'
 
 import type { DatabaseContext } from './client.js'
@@ -11,7 +11,7 @@ export function checksumBundle(bundle: unknown) {
 }
 
 export async function seedContent(database: DatabaseContext) {
-  const bundle = TrainingContentBundleSchema.parse(trainingContentBundle)
+  const bundle = TrainingContentBundleSchema.parse(remoteTrainingContentBundle)
   const checksum = checksumBundle(bundle)
   await database.db.execute(sql`
     INSERT INTO content_releases (release_version, bundle, checksum)

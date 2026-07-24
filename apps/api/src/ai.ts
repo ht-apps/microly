@@ -1,12 +1,14 @@
-import { createHmac } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 
 import {
+  AdminSessionOutlineSchema,
   AiEvaluationCreateRequestSchema,
   AiEvaluationRatingRequestSchema,
   AiEvaluationResultSchema,
+  type AdminSessionOutline,
   type AiEvaluationResult,
 } from '@microly/api-contract'
-import { ReviewVariantSchema, TrainingContentBundleSchema, type PracticeCard, type TrainingSession } from '@microly/content-schema'
+import { ReviewVariantSchema, TrainingContentBundleSchema, TrainingSessionSchema, type PracticeCard, type TrainingSession } from '@microly/content-schema'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 
@@ -49,6 +51,23 @@ export interface AiProvider {
     config: AiModelRuntimeConfig
     signal: AbortSignal
   }): Promise<AiProviderResult>
+  generateSessionOutlines?(input: {
+    catalog: { catalogId: string; title: string; skill: string; description: string }
+    existingSessions: Array<{ title: string; objective: string; difficulty: string }>
+    count: number
+    difficulties: Array<'L1' | 'L2' | 'L3'>
+    brief: string
+    config: AiModelRuntimeConfig
+    signal: AbortSignal
+  }): Promise<AiProviderResult>
+  generateTrainingSessions?(input: {
+    catalog: { catalogId: string; title: string; skill: string; description: string }
+    outlines: AdminSessionOutline[]
+    existingSessions: Array<{ title: string; objective: string }>
+    reviewVariantCount: 2
+    config: AiModelRuntimeConfig
+    signal: AbortSignal
+  }): Promise<AiProviderResult>
 }
 
 const ProviderOutputSchema = z.object({
@@ -64,6 +83,122 @@ const ProviderOutputSchema = z.object({
     reasonCode: z.enum(['provider_safety']).nullable(),
   }).strict(),
 }).strict()
+
+// Identifiers and requested difficulty are controlled by the server. Requiring the
+// model to invent UUIDs made otherwise valid outlines fail for a non-content field.
+const ModelSessionOutlineSchema = AdminSessionOutlineSchema.omit({ outlineId: true, difficulty: true }).extend({
+  outlineId: z.string().optional(),
+  difficulty: z.enum(['L1', 'L2', 'L3']).optional(),
+}).strict()
+
+const generatedCardTypes = ['scenario', 'choice', 'feedback', 'principle', 'practice', 'completion'] as const
+
+function isMutableRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function normalizeGeneratedOption(value: unknown, optionId: string) {
+  if (!isMutableRecord(value)) return value
+  value.id = optionId
+  if (value.rating === '推荐') value.rating = 'recommended'
+  if (value.rating === '有风险') value.rating = 'risky'
+  if (value.rating === '不推荐') value.rating = 'not_recommended'
+  if (isMutableRecord(value.feedback) && (value.feedback.condition === null || value.feedback.condition === '')) {
+    Reflect.deleteProperty(value.feedback, 'condition')
+  }
+  return value
+}
+
+function normalizeGeneratedReviewVariant(value: unknown, variantIndex: number, session: TrainingSession) {
+  if (!isMutableRecord(value)) return value
+  const variant = structuredClone(value)
+  variant.variantId = `review-${variantIndex + 1}`
+  if (typeof variant.context === 'string' && variant.context.length < 40) {
+    const scenario = session.cards.find((card) => card.type === 'scenario')
+    variant.context = `${variant.context}。${scenario?.context ?? session.objective}`.slice(0, 120)
+  }
+  if (Array.isArray(variant.options)) {
+    variant.options.forEach((option, optionIndex) => normalizeGeneratedOption(option, `review-${variantIndex + 1}-option-${optionIndex + 1}`))
+  }
+  return variant
+}
+
+function extractGeneratedReviewCandidates(value: unknown) {
+  if (!isMutableRecord(value)) return []
+  if (Array.isArray(value.candidates)) return value.candidates
+  if (Array.isArray(value.reviewVariants)) return value.reviewVariants
+  if (isMutableRecord(value.candidate)) return [value.candidate]
+  if (isMutableRecord(value.output)) {
+    if (Array.isArray(value.output.candidates)) return value.output.candidates
+    if (Array.isArray(value.output.reviewVariants)) return value.output.reviewVariants
+    if (isMutableRecord(value.output.candidate)) return [value.output.candidate]
+  }
+  if (typeof value.title === 'string' && Array.isArray(value.options)) return [value]
+  return []
+}
+
+function normalizeGeneratedSession(
+  value: unknown,
+  catalog: { skill: string },
+  outline: AdminSessionOutline,
+  reviewVariantCount: number,
+) {
+  if (!isMutableRecord(value)) return value
+  const session = structuredClone(value)
+  session.schemaVersion = '1.0'
+  session.sessionId = `generated-${randomUUID()}`
+  session.contentVersion = 1
+  session.title = outline.title
+  session.objective = outline.objective
+  session.skill = catalog.skill
+  session.difficulty = outline.difficulty
+  session.riskLevel = outline.riskLevel
+  session.estimatedMinutes = 3
+
+  if (Array.isArray(session.cards)) {
+    session.cards.forEach((card, cardIndex) => {
+      if (!isMutableRecord(card) || cardIndex >= generatedCardTypes.length) return
+      card.id = generatedCardTypes[cardIndex]!
+      card.type = generatedCardTypes[cardIndex]!
+      if (cardIndex === 0 && typeof card.context === 'string' && card.context.length < 40) {
+        card.context = `${card.context}。${outline.scenarioAngle}`.slice(0, 120)
+      }
+      if (cardIndex === 1 && Array.isArray(card.options)) {
+        card.options.forEach((option, optionIndex) => {
+          normalizeGeneratedOption(option, `choice-${optionIndex + 1}`)
+        })
+      }
+      if (cardIndex === 4 && Array.isArray(card.dimensions)) {
+        card.dimensions.forEach((dimension, dimensionIndex) => {
+          if (!isMutableRecord(dimension)) return
+          dimension.id = `dimension-${dimensionIndex + 1}`
+          if (typeof dimension.keywords === 'string') {
+            dimension.keywords = dimension.keywords.split(/[、，,]/u).map((keyword) => keyword.trim()).filter(Boolean)
+          }
+        })
+        if (typeof card.minLength === 'string' && /^\d+$/u.test(card.minLength)) card.minLength = Number(card.minLength)
+        if (typeof card.maxLength === 'string' && /^\d+$/u.test(card.maxLength)) card.maxLength = Number(card.maxLength)
+      }
+    })
+  }
+
+  if (reviewVariantCount === 0) {
+    session.reviewVariants = []
+  } else if (Array.isArray(session.reviewVariants)) {
+    const reviewVariants = session.reviewVariants.slice(0, reviewVariantCount)
+    session.reviewVariants = reviewVariants
+    reviewVariants.forEach((variant, variantIndex) => {
+      if (!isMutableRecord(variant)) return
+      variant.variantId = `review-${variantIndex + 1}`
+      if (Array.isArray(variant.options)) {
+        variant.options.forEach((option, optionIndex) => {
+          normalizeGeneratedOption(option, `review-${variantIndex + 1}-option-${optionIndex + 1}`)
+        })
+      }
+    })
+  }
+  return session
+}
 
 export class AiProviderValidationError extends Error {
   constructor(readonly issuePaths: string[]) {
@@ -124,7 +259,7 @@ export function createDeepseekProvider(apiKey: string, baseUrl = 'https://api.de
     }
     throw lastFailure instanceof Error ? lastFailure : new Error('deepseek_invalid_output')
   }
-  return {
+  const provider: AiProvider = {
     async listModels() {
       const response = await fetch(`${baseUrl}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(10000) })
       if (!response.ok) throw new Error('deepseek_models_failed')
@@ -168,7 +303,14 @@ export function createDeepseekProvider(apiKey: string, baseUrl = 'https://api.de
         const user = JSON.stringify({
           count: 1,
           candidateNumber: candidateIndex + 1,
-          output: { candidates: [{ variantId: '小写英文数字连字符', title: '标题', context: '40到120字情景', question: '问题', prompt: '选择提示', options: [{ id: '选项ID', text: '表达', rating: 'recommended|risky|not_recommended', feedback: { interpretation: '理解', strength: '优点', risk: '风险', condition: '适用条件可选' } }] }] },
+          output: { candidates: [{
+            variantId: `review-candidate-${candidateIndex + 1}`, title: '1-40字标题', context: '40到120字完整新情景', question: '1-50字问题', prompt: '1-60字选择提示',
+            options: [
+              { id: 'option-1', text: '第一种表达', rating: 'not_recommended', feedback: { interpretation: '对表达的理解', strength: '其中合理的部分', risk: '主要风险', condition: '适用条件可选' } },
+              { id: 'option-2', text: '第二种表达', rating: 'risky', feedback: { interpretation: '对表达的理解', strength: '其中合理的部分', risk: '主要风险', condition: '适用条件可选' } },
+              { id: 'option-3', text: '第三种表达', rating: 'recommended', feedback: { interpretation: '对表达的理解', strength: '其中合理的部分', risk: '主要风险', condition: '适用条件可选' } },
+            ],
+          }] },
           sourceSession: session,
         })
         let validationFeedback = ''
@@ -176,17 +318,26 @@ export function createDeepseekProvider(apiKey: string, baseUrl = 'https://api.de
           const correction = validationFeedback
             ? `\n\n上一次结果未通过 Schema 校验。只修正以下结构问题后重新输出完整 JSON：${validationFeedback}`
             : ''
-          const result = await completeJson(system, `${user}${correction}`, config, signal)
-          const parsed = z.object({ candidates: z.array(ReviewVariantSchema).length(1) }).strict().safeParse(result.value)
-          if (parsed.success) return { ...result, candidate: parsed.data.candidates[0]!, formatRetries: result.formatRetries + validationAttempt }
-          if (signal.aborted) throw parsed.error
+          const result = await completeJson(system, `${user}${correction}`, { ...config, maxTokens: Math.max(config.maxTokens, 1600) }, signal)
+          const rawCandidates = extractGeneratedReviewCandidates(result.value)
+            .map((candidate) => normalizeGeneratedReviewVariant(candidate, candidateIndex, session))
+          const parsed = z.object({ candidates: z.array(ReviewVariantSchema).length(1) }).strict().safeParse({ candidates: rawCandidates })
+          const candidate = parsed.success ? parsed.data.candidates[0]! : undefined
+          const originalChoice = session.cards.find((card) => card.type === 'choice')
+          const repeatsOriginal = Boolean(candidate && originalChoice
+            && candidate.prompt === originalChoice.prompt
+            && JSON.stringify(candidate.options.map((option) => option.text)) === JSON.stringify(originalChoice.options.map((option) => option.text)))
+          if (candidate && !repeatsOriginal) return { ...result, candidate, formatRetries: result.formatRetries + validationAttempt }
+          const issues = repeatsOriginal
+            ? [{ path: 'candidates.0', rule: '复习变体的提示和三个选项不能与原题完全相同，必须更换情境和全部选项表达' }]
+            : !parsed.success
+                ? parsed.error.issues.slice(0, 12).map((issue) => ({ path: issue.path.map(String).join('.') || 'root', rule: issue.message }))
+                : [{ path: 'candidates.0', rule: '复习变体内容无效' }]
+          if (signal.aborted) throw new Error('aborted')
           if (validationAttempt === 1) {
-            throw new AiProviderValidationError(parsed.error.issues.slice(0, 12).map((issue) => issue.path.map(String).join('.') || 'root'))
+            throw new AiProviderValidationError(issues.map((issue) => issue.path))
           }
-          validationFeedback = JSON.stringify(parsed.error.issues.slice(0, 12).map((issue) => ({
-            path: issue.path.map(String).join('.'),
-            rule: issue.message,
-          })))
+          validationFeedback = JSON.stringify(issues)
         }
         throw new Error('deepseek_invalid_review_variants')
       }
@@ -212,7 +363,113 @@ export function createDeepseekProvider(apiKey: string, baseUrl = 'https://api.de
         formatRetries: results.reduce((total, result) => total + result.formatRetries, 0),
       }
     },
+    async generateSessionOutlines({ catalog, existingSessions, count, difficulties, brief, config, signal }) {
+      const system = `你是微习的职场训练内容策划。为指定章节生成互不重复、可在3分钟完成的低风险训练大纲。只输出JSON，不要Markdown。必须恰好生成指定数量。每个大纲只包含 title(1-50字)、objective(1-120字)、difficulty(L1|L2|L3)、riskLevel(low|medium)、scenarioAngle(10-160字)、reviewFocus(3-100字)，不要输出 outlineId，ID由服务端生成。不得涉及法律、医疗、心理诊断、安全事故、公司机密、人格评价或操控技巧。严格遵守给定难度顺序。`
+      const user = JSON.stringify({ catalog, existingSessions, count, difficulties, brief, output: { outlines: [{ title: '标题', objective: '可观察学习目标', difficulty: 'L1', riskLevel: 'low', scenarioAngle: '至少十个字的匿名职场情境角度', reviewFocus: '复习变化方向' }] } })
+      let validationFeedback = ''
+      for (let validationAttempt = 0; validationAttempt < 2; validationAttempt += 1) {
+        const correction = validationFeedback
+          ? `\n\n上一次结果未通过校验。请只修正以下问题并重新输出完整 JSON：${validationFeedback}`
+          : ''
+        const result = await completeJson(system, `${user}${correction}`, { ...config, maxTokens: Math.max(config.maxTokens, 2400) }, signal)
+        const parsed = z.object({ outlines: z.array(ModelSessionOutlineSchema).length(count) }).strict().safeParse(result.value)
+        if (parsed.success) {
+          const normalized = parsed.data.outlines.map(({ outlineId: _ignoredId, difficulty: _ignoredDifficulty, ...outline }, index) => ({
+            ...outline,
+            outlineId: randomUUID(),
+            difficulty: difficulties[index]!,
+          }))
+          const validated = z.array(AdminSessionOutlineSchema).length(count).parse(normalized)
+          return { ...result, value: { outlines: validated }, formatRetries: result.formatRetries + validationAttempt }
+        }
+        const issues = parsed.error.issues.slice(0, 12).map((issue) => ({
+          path: issue.path.map(String).join('.') || 'root',
+          rule: issue.message,
+        }))
+        if (validationAttempt === 1) throw new AiProviderValidationError(issues.map((issue) => issue.path))
+        validationFeedback = JSON.stringify(issues)
+      }
+      throw new Error('deepseek_invalid_session_outlines')
+    },
+    async generateTrainingSessions({ catalog, outlines, existingSessions, reviewVariantCount, config, signal }) {
+      const generateOne = async (outline: AdminSessionOutline) => {
+        const system = '你是微习的职场训练内容编辑。根据已审核大纲生成一组训练的六卡片主体，只输出JSON，不要Markdown。只负责内容字段，所有ID、版本、技能、难度和风险由服务端设置，可以不输出。cards必须恰好六张并严格依次对应 scenario、choice、feedback、principle、practice、completion。choice恰好三个选项且恰好一个recommended；所有选项都有 interpretation、strength、risk，condition可省略且不得为null。practice包含1-4个维度，每个维度有关键词。不要生成reviewVariants，服务端会在下一阶段单独生成。内容应具体、精炼、克制、可执行，总输出控制在3000 tokens内；不评价人格，不使用绝对化结论，不涉及法律、医疗、心理、安全事故或公司机密。不得复制已有训练。严格遵守示例字段和长度要求。'
+        const ratingOrder = ['not_recommended', 'risky', 'recommended'] as const
+        const ratingOffset = outline.outlineId.charCodeAt(0) % ratingOrder.length
+        const optionShape = (offset: number) => Array.from({ length: 3 }, (_, index) => ({
+          text: `第${index + 1}个不同的1-160字表达`,
+          rating: ratingOrder[(index + offset) % ratingOrder.length],
+          feedback: { interpretation: '1-140字理解', strength: '1-140字合理处', risk: '1-140字风险', condition: '可选，1-140字适用条件' },
+        }))
+        const outputShape = {
+          session: {
+            title: '1-50字标题', objective: '1-120字可观察目标',
+            cards: [
+              { type: 'scenario', eyebrow: '1-30字分类', title: '1-40字标题', context: '40-120字完整匿名情境', question: '1-50字问题' },
+              { type: 'choice', prompt: '1-60字选择提示', options: optionShape(ratingOffset) },
+              { type: 'feedback', title: '1-40字标题', comparisonLabel: '1-30字比较标签' },
+              { type: 'principle', title: '1-40字', summary: '1-120字', formula: '1-60字', counterexample: '1-160字', example: '1-200字' },
+              { type: 'practice', title: '1-40字', prompt: '1-160字', minLength: 10, maxLength: 200, dimensions: [{ title: '1-30字', description: '1-100字', keywords: ['1-20字关键词'] }], referenceAnswer: '1-240字', disclaimer: '1-120字隐私提醒' },
+              { type: 'completion', title: '1-40字', summary: '1-120字', takeaway: '1-100字' },
+            ],
+          },
+        }
+        const user = JSON.stringify({ catalog, outline, existingSessions, outputShape })
+        let validationFeedback = ''
+        for (let validationAttempt = 0; validationAttempt < 2; validationAttempt += 1) {
+          const correction = validationFeedback
+            ? `\n\n上一次结果未通过 Schema 校验。只修正以下问题并重新输出完整 JSON：${validationFeedback}`
+            : ''
+          const result = await completeJson(system, `${user}${correction}`, { ...config, maxTokens: Math.max(config.maxTokens, 4000) }, signal)
+          const response = isMutableRecord(result.value) ? result.value.session : undefined
+          const normalized = normalizeGeneratedSession(response, catalog, outline, 0)
+          const parsed = TrainingSessionSchema.safeParse(normalized)
+          if (parsed.success) {
+            const variantResult = await provider.generateReviewVariants!({
+              session: parsed.data,
+              count: reviewVariantCount,
+              config,
+              signal,
+            })
+            const variants = z.object({ candidates: z.array(ReviewVariantSchema).length(reviewVariantCount) }).strict().parse(variantResult.value).candidates
+            const finalSession = TrainingSessionSchema.safeParse({ ...parsed.data, reviewVariants: variants })
+            if (!finalSession.success) {
+              throw new AiProviderValidationError(finalSession.error.issues.slice(0, 16).map((issue) => `session.${issue.path.map(String).join('.') || 'root'}`))
+            }
+            return {
+              modelId: result.modelId,
+              session: finalSession.data,
+              usage: {
+                promptTokens: result.usage.promptTokens + variantResult.usage.promptTokens,
+                cacheHitTokens: result.usage.cacheHitTokens + variantResult.usage.cacheHitTokens,
+                cacheMissTokens: result.usage.cacheMissTokens + variantResult.usage.cacheMissTokens,
+                completionTokens: result.usage.completionTokens + variantResult.usage.completionTokens,
+              },
+              formatRetries: result.formatRetries + validationAttempt + variantResult.formatRetries,
+            }
+          }
+          const issues = parsed.error.issues.slice(0, 16).map((issue) => ({ path: issue.path.map(String).join('.') || 'session', rule: issue.message }))
+          if (validationAttempt === 1) throw new AiProviderValidationError(issues.map((issue) => `session.${issue.path}`))
+          validationFeedback = JSON.stringify(issues.map((issue) => ({ ...issue, path: `session.${issue.path}` })))
+        }
+        throw new Error('deepseek_invalid_training_session')
+      }
+      const results = []
+      for (const outline of outlines) results.push(await generateOne(outline))
+      return {
+        value: { sessions: results.map((result) => result.session) },
+        modelId: results[0]!.modelId,
+        usage: results.reduce((total, result) => ({
+          promptTokens: total.promptTokens + result.usage.promptTokens,
+          cacheHitTokens: total.cacheHitTokens + result.usage.cacheHitTokens,
+          cacheMissTokens: total.cacheMissTokens + result.usage.cacheMissTokens,
+          completionTokens: total.completionTokens + result.usage.completionTokens,
+        }), { promptTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0, completionTokens: 0 }),
+        formatRetries: results.reduce((total, result) => total + result.formatRetries, 0),
+      }
+    },
   }
+  return provider
 }
 
 function sendError(reply: FastifyReply, status: number, code: string, message: string) {

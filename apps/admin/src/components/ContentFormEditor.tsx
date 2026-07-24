@@ -75,11 +75,13 @@ export function ContentFormEditor({
   bundle, issues, selectedKey, onSelect, onChange, readOnly = false,
   onGenerateVariants, generateVariantsPending = false, generateVariantsDisabled = false,
   onWithdrawSession, withdrawDisabled = false,
+  reviewedSessionIds = [], unreviewedSessionIds = [], reviewableSessionIds = [], onReviewSession,
 }: {
   bundle: EditableBundle; issues: EditorIssue[]; selectedKey: string; onSelect: (key: string) => void
   onChange: (bundle: EditableBundle) => void; readOnly?: boolean
   onGenerateVariants?: (sessionId: string) => void; generateVariantsPending?: boolean; generateVariantsDisabled?: boolean
   onWithdrawSession?: (sessionId: string) => void; withdrawDisabled?: boolean
+  reviewedSessionIds?: string[]; unreviewedSessionIds?: string[]; reviewableSessionIds?: string[]; onReviewSession?: (sessionId: string) => void
 }) {
   const { modal, message } = App.useApp()
   const selection = parseNode(selectedKey)
@@ -183,7 +185,7 @@ export function ContentFormEditor({
     const sessionPath = `sessions.${sessionId}`
     const variants = session.reviewVariants ?? []
     return <Form layout="vertical" className="visual-form">
-      <div className="form-title-row"><Typography.Title level={4}>{session.title}</Typography.Title>{(!readOnly || onWithdrawSession) && <Space>{!readOnly && <><Button icon={<EditOutlined />} onClick={() => setRename({ label: '训练 ID', current: sessionId, apply: (value) => renameSession(bundle, sessionId, value), selection: (value) => `session:${value}` })}>重命名 ID</Button><Button danger icon={<DeleteOutlined />} onClick={() => {
+      <div className="form-title-row"><Space><Typography.Title level={4}>{session.title}</Typography.Title>{reviewedSessionIds.includes(sessionId) && <Tag color="green">审核有效</Tag>}{unreviewedSessionIds.includes(sessionId) && <Tag color="gold">待审核</Tag>}</Space>{(!readOnly || onWithdrawSession) && <Space>{!readOnly && <>{onReviewSession && reviewableSessionIds.includes(sessionId) && <Button onClick={() => onReviewSession(sessionId)}>{reviewedSessionIds.includes(sessionId) ? '重新审核' : '审核训练'}</Button>}<Button icon={<EditOutlined />} onClick={() => setRename({ label: '训练 ID', current: sessionId, apply: (value) => renameSession(bundle, sessionId, value), selection: (value) => `session:${value}` })}>重命名 ID</Button><Button danger icon={<DeleteOutlined />} onClick={() => {
         const owning = Object.values(bundle.catalogs).filter((catalog) => catalog.sessionIds.includes(sessionId))
         const removed = owning.filter((catalog) => catalog.sessionIds.length === 1).map((catalog) => catalog.title)
         modal.confirm({ title: `删除训练“${session.title}”？`, content: removed.length ? `同时删除将变空的章节：${removed.join('、')}` : '将同时清理所有章节引用。', okButtonProps: { danger: true }, onOk: () => { try { onChange(deleteSession(bundle, sessionId).bundle); onSelect('library') } catch (cause) { message.error(cause instanceof Error ? cause.message : '无法删除') } } })

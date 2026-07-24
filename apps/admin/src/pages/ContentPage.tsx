@@ -11,6 +11,7 @@ import { useAuth } from '../auth'
 import { CardPreview } from '../components/CardPreview'
 import { ContentFormEditor } from '../components/ContentFormEditor'
 import type { EditorIssue, JsonEditorHandle } from '../components/JsonEditor'
+import { ReviewChecklist } from '../components/ReviewChecklist'
 import { parseEditableBundle, semanticJson, type EditableBundle } from '../features/content/content-workspace'
 import { PageError, PageLoading } from '../components/PageState'
 import { PageHeader } from '../components/PageHeader'
@@ -19,6 +20,23 @@ import { queryKeys } from '../query-client'
 const LazyJsonEditor = lazy(() => import('../components/JsonEditor').then((module) => ({ default: module.JsonEditor })))
 
 type ReasonAction = 'publish' | 'withdraw'
+
+const reviewChecks = [
+  ['objectiveAligned', '教学目标明确且一致'],
+  ['optionQuality', '三个选项质量与评分合理'],
+  ['feedbackBalanced', '反馈平衡且不做人格评价'],
+  ['principleConsistent', '原则与训练目标一致'],
+  ['practiceRubric', '主动表达维度可判定'],
+  ['safetyAndPrivacy', '安全与隐私检查通过'],
+  ['mobilePreview', '移动端预览可读'],
+] as const
+
+type ReviewFormValues = {
+  checks: string[]
+  operatorLabel: string
+  reviewerLabel?: string
+  note?: string
+}
 
 export default function ContentPage() {
   const { token } = useAuth()
@@ -37,7 +55,9 @@ export default function ContentPage() {
   const [variantCandidates, setVariantCandidates] = useState<ReviewVariant[]>([])
   const [selectedVariantIds, setSelectedVariantIds] = useState<string[]>([])
   const [releaseView, setReleaseView] = useState<'summary' | 'form' | 'json'>('summary')
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null)
   const [reasonForm] = Form.useForm<{ reason: string }>()
+  const [reviewForm] = Form.useForm<ReviewFormValues>()
 
   const indexQuery = useQuery({ queryKey: queryKeys.content, queryFn: () => adminApi.getContentIndex(token) })
   const draftQuery = useQuery({
@@ -46,6 +66,16 @@ export default function ContentPage() {
     enabled: Boolean(draftId),
   })
   const draft = draftQuery.data
+  const reviewsQuery = useQuery({
+    queryKey: queryKeys.contentReviews(draftId ?? ''),
+    queryFn: () => adminApi.getContentReviews(token, draftId as string),
+    enabled: Boolean(draftId && draft),
+  })
+  const readinessQuery = useQuery({
+    queryKey: queryKeys.contentReadiness(draftId ?? ''),
+    queryFn: () => adminApi.getContentReadiness(token, draftId as string),
+    enabled: Boolean(draftId && draft),
+  })
   const requestedReleaseVersion = Number(search.get('release'))
   const releaseVersion = Number.isInteger(requestedReleaseVersion) && requestedReleaseVersion > 0 ? requestedReleaseVersion : null
   const releaseQuery = useQuery({
@@ -166,6 +196,13 @@ export default function ContentPage() {
   const refreshContent = async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.content })
   }
+  const refreshDraftReviewState = async () => {
+    if (!draftId) return
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.contentReviews(draftId) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.contentReadiness(draftId) }),
+    ])
+  }
   const createMutation = useMutation({
     mutationFn: (version?: number) => version
       ? adminApi.createRollbackDraft(token, version)
@@ -191,7 +228,7 @@ export default function ContentPage() {
       setSavedSemantic(semanticJson(value.bundle))
       setDirty(false)
       setValidation(null)
-      await refreshContent()
+      await Promise.all([refreshContent(), refreshDraftReviewState()])
       message.success('草稿已保存')
     },
     onError: (cause) => notification.error({
@@ -224,7 +261,7 @@ export default function ContentPage() {
       setSavedSemantic(semanticJson(value.bundle))
       setDirty(false)
       setValidation(null)
-      await refreshContent()
+      await Promise.all([refreshContent(), refreshDraftReviewState()])
       message.success(`草稿已恢复到 v${value.baseReleaseVersion}`)
     },
     onError: (cause) => notification.error({ message: '恢复草稿失败', description: cause.message }),
@@ -278,6 +315,36 @@ export default function ContentPage() {
     },
     onError: (cause) => notification.error({ message: '复习变体生成失败', description: cause.message }),
   })
+  const reviewMutation = useMutation({
+    mutationFn: async (values: ReviewFormValues) => {
+      if (!draft || !reviewSessionId || !editable.bundle) throw new Error('训练不存在或草稿尚未加载')
+      const session = editable.bundle.sessions[reviewSessionId]
+      if (!session) throw new Error('训练不存在')
+      if (dirty) throw new Error('请先保存当前修改，再提交审核')
+      if (values.checks.length !== reviewChecks.length) throw new Error('请完成全部七项检查')
+      const readiness = readinessQuery.data?.sessionDigests[reviewSessionId]
+        ? readinessQuery.data
+        : (await readinessQuery.refetch()).data
+      const contentDigest = readiness?.sessionDigests[reviewSessionId]
+      if (!contentDigest) throw new Error('审核摘要尚未加载，请稍后重试')
+      const checklist = Object.fromEntries(reviewChecks.map(([key]) => [key, true])) as Record<string, true>
+      return adminApi.reviewSession(token, draft.id, reviewSessionId, {
+        revision: draft.revision,
+        contentDigest,
+        checklist,
+        operatorLabel: values.operatorLabel.trim(),
+        reviewerLabel: values.reviewerLabel?.trim() || null,
+        note: values.note?.trim() || null,
+      })
+    },
+    onSuccess: async () => {
+      setReviewSessionId(null)
+      reviewForm.resetFields()
+      await refreshDraftReviewState()
+      message.success('训练审核已记录')
+    },
+    onError: (cause) => notification.error({ message: '审核提交失败', description: cause.message }),
+  })
 
   const insertVariants = () => {
     if (!selectedSessionId || !selectedVariantIds.length) return
@@ -326,13 +393,14 @@ export default function ContentPage() {
     if (reasonAction === 'withdraw') withdrawMutation.mutate(reason.trim())
   }
   const issues = (validation?.issues ?? []) as EditorIssue[]
-  const publishReady = Boolean(draft && validation?.valid && validation.revision === draft.revision && !dirty)
+  const publishReady = Boolean(draft && validation?.valid && validation.revision === draft.revision && !dirty
+    && readinessQuery.data && readinessQuery.data.unreviewedSessions.length === 0 && readinessQuery.data.blockingIssues.length === 0)
   const busy = saveMutation.isPending || deleteDraftMutation.isPending || restoreDraftMutation.isPending
     || validateMutation.isPending || publishMutation.isPending || withdrawMutation.isPending
 
   if (indexQuery.isError) return <PageError onRetry={() => void indexQuery.refetch()} />
   return <section className={!draftId && releaseVersion ? 'content-page release-page' : undefined}>
-    <PageHeader eyebrow="内容运营" title="版本与草稿" description="发布快照不可修改；回滚和下架都会生成更高版本。" extra={<Button type="primary" icon={<PlusOutlined />} loading={createMutation.isPending} disabled={!indexQuery.data?.currentVersion} onClick={() => createMutation.mutate(undefined)}>新建草稿</Button>} />
+    <PageHeader eyebrow="内容运营" title="版本与草稿" description="发布快照不可修改；回滚和下架都会生成更高版本。" extra={<Space><Button onClick={() => navigate('/content/production')}>内容生产</Button><Button type="primary" icon={<PlusOutlined />} loading={createMutation.isPending} disabled={!indexQuery.data?.currentVersion} onClick={() => createMutation.mutate(undefined)}>新建草稿</Button></Space>} />
     {indexQuery.isLoading ? <PageLoading rows={10} /> : <Layout className={!draftId && releaseVersion ? 'content-workbench release-workbench' : 'content-workbench'}>
       <Layout.Sider width={270} theme="light" className="content-sidebar">
         <Typography.Title level={5}>草稿</Typography.Title>
@@ -399,7 +467,7 @@ export default function ContentPage() {
               <Button danger icon={<DeleteOutlined />} loading={deleteDraftMutation.isPending} disabled={busy} onClick={requestDeleteDraft}>删除</Button>
               <Button icon={<SaveOutlined />} loading={saveMutation.isPending} disabled={!dirty || busy} onClick={() => saveMutation.mutate()}>保存</Button>
               <Button loading={validateMutation.isPending} disabled={dirty || busy} onClick={() => validateMutation.mutate()}>校验</Button>
-              <Tooltip title={publishReady ? '' : '保存并通过当前修订校验后才能发布'}><span><Button type="primary" icon={<CheckCircleOutlined />} disabled={!publishReady || busy} onClick={() => setReasonAction('publish')}>发布</Button></span></Tooltip>
+              <Tooltip title={publishReady ? '' : '保存、校验并完成所有变更训练的审核后才能发布'}><span><Button type="primary" icon={<CheckCircleOutlined />} disabled={!publishReady || busy} onClick={() => setReasonAction('publish')}>发布</Button></span></Tooltip>
             </Space>
           </div>
           {editorMode === 'form' && editable.bundle ? <ContentFormEditor
@@ -411,6 +479,30 @@ export default function ContentPage() {
             onGenerateVariants={(sessionId) => generateVariantsMutation.mutate(sessionId)}
             generateVariantsPending={generateVariantsMutation.isPending}
             generateVariantsDisabled={dirty || busy}
+            reviewedSessionIds={(reviewsQuery.data?.items ?? []).filter((item) => item.current).map((item) => item.sessionId)}
+            unreviewedSessionIds={readinessQuery.data?.unreviewedSessions ?? []}
+            reviewableSessionIds={readinessQuery.data?.changedSessions ?? []}
+            onReviewSession={async (sessionId) => {
+              if (dirty) {
+                message.warning('请先保存当前修改，再审核训练')
+                return
+              }
+              const readiness = readinessQuery.data?.sessionDigests[sessionId]
+                ? readinessQuery.data
+                : (await readinessQuery.refetch()).data
+              if (!readiness?.sessionDigests[sessionId]) {
+                message.info('该训练与基础版本一致，无需审核')
+                return
+              }
+              const existing = reviewsQuery.data?.items.find((item) => item.sessionId === sessionId && item.current)
+              setReviewSessionId(sessionId)
+              reviewForm.setFieldsValue({
+                checks: existing ? reviewChecks.map(([key]) => key) : [],
+                operatorLabel: existing?.operatorLabel ?? '',
+                reviewerLabel: existing?.reviewerLabel ?? undefined,
+                note: existing?.note ?? undefined,
+              })
+            }}
           /> : <Suspense fallback={<div className="editor-loading"><Spin description="正在加载 Monaco Editor…" /></div>}>
             <LazyJsonEditor ref={editorRef} value={editor} issues={issues} onChange={updateEditorText} />
           </Suspense>}
@@ -454,10 +546,39 @@ export default function ContentPage() {
       destroyOnHidden
     >
       <Typography.Paragraph type="secondary">{reasonAction === 'publish' ? '发布后将生成不可修改的新版本。' : '下架会立即生成移除该训练的新版本，历史学习记录仍会保留。'}</Typography.Paragraph>
+      {reasonAction === 'publish' && readinessQuery.data && <Alert
+        className="publish-readiness-summary"
+        type={readinessQuery.data.blockingIssues.length || readinessQuery.data.unreviewedSessions.length ? 'warning' : 'success'}
+        showIcon
+        message={`${readinessQuery.data.totalSessions} / ${readinessQuery.data.targetSessions} 组训练`}
+        description={`待审核 ${readinessQuery.data.unreviewedSessions.length} 组 · 缺少复习变体 ${readinessQuery.data.missingVariants.length} 组 · 阻断项 ${readinessQuery.data.blockingIssues.length} 个`}
+      />}
       <Form form={reasonForm} layout="vertical" requiredMark={false} preserve={false}>
         <Form.Item name="reason" label="操作原因" rules={[{ required: true, message: '请填写操作原因' }, { min: 3, max: 300, message: '请输入 3–300 个字符' }]}>
           <Input.TextArea rows={4} maxLength={300} showCount autoFocus />
         </Form.Item>
+      </Form>
+    </Modal>
+    <Modal
+      open={Boolean(reviewSessionId)}
+      title={`审核训练：${reviewSessionId ? editable.bundle?.sessions[reviewSessionId]?.title ?? reviewSessionId : ''}`}
+      okText="确认审核"
+      okButtonProps={{ loading: reviewMutation.isPending }}
+      onOk={() => reviewForm.validateFields().then((values) => reviewMutation.mutate(values))}
+      onCancel={() => { setReviewSessionId(null); reviewForm.resetFields() }}
+      destroyOnHidden
+    >
+      <Typography.Paragraph type="secondary">审核只对当前训练内容摘要有效；继续编辑后会自动失效。</Typography.Paragraph>
+      <Form form={reviewForm} layout="vertical" requiredMark={false} preserve={false}>
+        <Form.Item name="checks" label="七项检查" rules={[{ validator: (_, value: string[] | undefined) => value?.length === reviewChecks.length ? Promise.resolve() : Promise.reject(new Error('请完成全部七项检查')) }]}>
+          <ReviewChecklist options={reviewChecks} />
+        </Form.Item>
+        <Form.Item name="operatorLabel" label="操作人" rules={[{ required: true, min: 2, max: 50, message: '请输入 2–50 个字符' }]}><Input maxLength={50} /></Form.Item>
+        {reviewSessionId && editable.bundle?.sessions[reviewSessionId]?.riskLevel === 'medium' && <Form.Item name="reviewerLabel" label="复核人" extra="中风险训练必须由不同于操作人的人员复核" dependencies={['operatorLabel']} rules={[
+          { required: true, min: 2, max: 50, message: '请输入 2–50 个字符' },
+          ({ getFieldValue }) => ({ validator: (_, value) => value?.trim() !== getFieldValue('operatorLabel')?.trim() ? Promise.resolve() : Promise.reject(new Error('复核人不能与操作人相同')) }),
+        ]}><Input maxLength={50} /></Form.Item>}
+        <Form.Item name="note" label="审核备注（可选）"><Input.TextArea rows={3} maxLength={500} showCount /></Form.Item>
       </Form>
     </Modal>
     <Modal className="review-variant-modal" open={variantCandidates.length > 0} title="选择要插入的复习变体" width={820} okText={`插入草稿${selectedVariantIds.length ? `（${selectedVariantIds.length}）` : ''}`} okButtonProps={{ disabled: !selectedVariantIds.length }} onOk={insertVariants} onCancel={() => setVariantCandidates([])} destroyOnHidden>

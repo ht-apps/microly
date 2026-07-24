@@ -1,5 +1,6 @@
 import {
   setTrainingContentBundle,
+  remoteTrainingContentBundle,
   trainingContentBundle,
 } from '@microly/training-content'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,6 +57,14 @@ describe('remote training content', () => {
     mocks.request.mockResolvedValue({ statusCode: 304, data: '' })
     await expect(refreshTrainingContent()).resolves.toBe(false)
     expect(mocks.trigger).not.toHaveBeenCalled()
+  })
+
+  it('整包校验并应用 30 组远程内容，同时不改变 10 组内置兜底', async () => {
+    expect(Object.keys(trainingContentBundle.sessions)).toHaveLength(10)
+    mocks.request.mockResolvedValue({ statusCode: 200, data: { data: { bundle: remoteTrainingContentBundle, checksum } } })
+    await expect(refreshTrainingContent()).resolves.toBe(true)
+    const cached = parseContentCache(mocks.storage.get(CONTENT_CACHE_STORAGE_KEY))
+    expect(Object.keys(cached?.bundle.sessions ?? {})).toHaveLength(30)
   })
 
   it('拒绝无效响应和低版本响应', async () => {

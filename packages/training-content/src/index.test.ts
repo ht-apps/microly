@@ -15,7 +15,7 @@ import reportConclusion from './data/report-conclusion-004.json'
 import reportRisk from './data/report-risk-005.json'
 import reportSupport from './data/report-support-006.json'
 import library from './data/training-library.json'
-import { loadTrainingContent } from './index'
+import { loadTrainingContent, remoteTrainingContentBundle, trainingContentBundle } from './index'
 
 const catalogInputs: Record<string, unknown> = {
   'boundary-communication': boundaryCatalog,
@@ -38,6 +38,17 @@ const sessionInputs: Record<string, unknown> = {
 }
 
 describe('training content repository', () => {
+  it('远程封测内容为 30 组，离线兜底仍保持原有 10 组', () => {
+    expect(Object.keys(trainingContentBundle.sessions)).toHaveLength(10)
+    expect(Object.keys(remoteTrainingContentBundle.sessions)).toHaveLength(30)
+    expect(remoteTrainingContentBundle.library.catalogIds.map((catalogId) => remoteTrainingContentBundle.catalogs[catalogId]!.sessionIds.length)).toEqual([8, 8, 7, 7])
+    Object.values(remoteTrainingContentBundle.sessions).forEach((session) => {
+      expect(session.cards.map((card) => card.type)).toEqual(['scenario', 'choice', 'feedback', 'principle', 'practice', 'completion'])
+      expect(session.cards.find((card) => card.type === 'choice')?.options.filter((option) => option.rating === 'recommended')).toHaveLength(1)
+      expect(session.reviewVariants).toHaveLength(2)
+    })
+  })
+
   it('按课程库顺序加载四章十组合法训练', () => {
     const repository = loadTrainingContent(library, catalogInputs, sessionInputs)
 

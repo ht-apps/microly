@@ -21,6 +21,9 @@ export const queryKeys = {
   aiMetrics: (window: '7d' | '30d') => ['admin', 'ai-metrics', window] as const,
   operations: (window: '1h' | '24h' | '7d') => ['admin', 'operations', window] as const,
   draft: (id: string) => ['admin', 'draft', id] as const,
+  generationJobs: (draftId: string) => ['admin', 'content-generation-jobs', draftId] as const,
+  contentReviews: (draftId: string) => ['admin', 'content-reviews', draftId] as const,
+  contentReadiness: (draftId: string) => ['admin', 'content-readiness', draftId] as const,
   feedback: (filters: { status?: string; category?: string; page: number; pageSize: number }) =>
     ['admin', 'feedback', filters] as const,
 }

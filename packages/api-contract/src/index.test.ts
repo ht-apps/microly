@@ -10,6 +10,9 @@ import {
   AdminFeedbackUpdateRequestSchema,
   AdminMetricsResponseSchema,
   AdminReviewVariantGenerateResponseSchema,
+  AdminOutlineGenerateRequestSchema,
+  AdminContentGenerationJobResponseSchema,
+  AdminContentReviewUpdateRequestSchema,
   AiEvaluationCreateRequestSchema,
   AiEvaluationResultSchema,
   AdminPublishRequestSchema,
@@ -34,6 +37,33 @@ const event = {
 } as const
 
 describe('API contract', () => {
+  it('严格校验内容生产任务和训练审核', () => {
+    const outlineRequest = {
+      requestId: '41111111-1111-4111-8111-111111111111', revision: 2, count: 2,
+      difficulties: ['L1', 'L2'], brief: '覆盖坏消息更新和依赖决策，不使用真实公司信息。',
+    }
+    expect(AdminOutlineGenerateRequestSchema.safeParse(outlineRequest).success).toBe(true)
+    expect(AdminOutlineGenerateRequestSchema.safeParse({ ...outlineRequest, practiceText: '不应出现' }).success).toBe(false)
+    expect(AdminContentReviewUpdateRequestSchema.safeParse({
+      revision: 2, contentDigest: 'a'.repeat(64), operatorLabel: '内容运营甲', reviewerLabel: null, note: null,
+      checklist: { objectiveAligned: true, optionQuality: true, feedbackBalanced: true, principleConsistent: true, practiceRubric: true, safetyAndPrivacy: true, mobilePreview: true },
+    }).success).toBe(true)
+    expect(AdminContentReviewUpdateRequestSchema.safeParse({
+      revision: 2, contentDigest: 'a'.repeat(64), operatorLabel: '内容运营甲',
+      checklist: { objectiveAligned: true, optionQuality: true, feedbackBalanced: true, principleConsistent: true, practiceRubric: true, safetyAndPrivacy: true, mobilePreview: false },
+    }).success).toBe(false)
+    expect(AdminContentGenerationJobResponseSchema.safeParse({ data: {
+      id: '51111111-1111-4111-8111-111111111111', requestId: outlineRequest.requestId,
+      draftId: '61111111-1111-4111-8111-111111111111', catalogId: 'clear-reporting', draftRevision: 2,
+      operation: 'session_outlines', status: 'queued', requestedCount: 2,
+      parameters: { difficulties: ['L1', 'L2'], brief: '生成匿名职场训练大纲。', outlineJobId: null, outlineIds: [] },
+      outlines: [], candidates: [], insertedCandidateIds: [], model: { modelId: 'deepseek-v4-flash', configRevision: 1, promptVersion: 'session-outline-v1' },
+      promptTokens: 0, completionTokens: 0, estimatedCostUsd: 0,
+      latencyMs: null, formatRetries: 0, failureCode: null,
+      createdAt: '2026-07-24T10:00:00.000Z', startedAt: null, completedAt: null,
+    } }).success).toBe(true)
+  })
+
   it('限制埋点批次为 50 条', () => {
     expect(AnalyticsBatchRequestSchema.safeParse({ events: Array(50).fill(event) }).success).toBe(true)
     expect(AnalyticsBatchRequestSchema.safeParse({ events: Array(51).fill(event) }).success).toBe(false)

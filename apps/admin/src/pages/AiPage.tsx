@@ -75,7 +75,21 @@ export default function AiPage() {
             <Col span={8}><Statistic title="生成次数" value={metrics.data.contentGeneration.total} /></Col>
             <Col span={8}><Statistic title="成功 / 失败" value={`${metrics.data.contentGeneration.succeeded} / ${metrics.data.contentGeneration.failed}`} /></Col>
             <Col span={8}><Statistic title="估算成本" value={`$${metrics.data.contentGeneration.estimatedCostUsd.toFixed(4)}`} /></Col>
-          </Row></Card>
+          </Row><Table
+            className="ai-generation-table"
+            size="small"
+            pagination={false}
+            rowKey="operation"
+            dataSource={metrics.data.contentGeneration.operations}
+            columns={[
+              { title: '类型', dataIndex: 'operation', render: (value) => ({ review_variants: '复习变体', session_outlines: '训练大纲', training_sessions: '完整训练' }[value as string] ?? value) },
+              { title: '成功 / 总数', render: (_, row) => `${row.succeeded} / ${row.total}` },
+              { title: '格式重试率', dataIndex: 'formatRetryRate', render: (value: number) => `${(value * 100).toFixed(1)}%` },
+              { title: 'P95', dataIndex: 'latencyP95', render: (value: number | null) => value === null ? '—' : `${Math.round(value)} ms` },
+              { title: 'Token', render: (_, row) => row.promptTokens + row.completionTokens },
+              { title: '成本', dataIndex: 'estimatedCostUsd', render: (value: number) => `$${value.toFixed(4)}` },
+            ]}
+          /></Card>
         </>}
       </Space></Col>
     </Row>

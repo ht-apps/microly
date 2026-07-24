@@ -24,6 +24,9 @@ import reportConclusionSession from './data/report-conclusion-004.json' with { t
 import reportRiskSession from './data/report-risk-005.json' with { type: 'json' }
 import reportSupportSession from './data/report-support-006.json' with { type: 'json' }
 import rawLibrary from './data/training-library.json' with { type: 'json' }
+import { betaProductionPlan, buildBetaSession } from './beta-content.js'
+
+export { betaProductionPlan } from './beta-content.js'
 
 export type TrainingContentErrorScope = 'library' | 'catalog' | 'session'
 
@@ -193,6 +196,49 @@ export const trainingContentBundle: TrainingContentBundle = TrainingContentBundl
   library: rawLibrary,
   catalogs: catalogInputs,
   sessions: sessionInputs,
+})
+
+function addSeedReviewVariants(session: TrainingSession, index: number): TrainingSession {
+  if (session.reviewVariants.length >= 2) return session
+  const scenario = session.cards.find((card) => card.type === 'scenario')!
+  const choice = session.cards.find((card) => card.type === 'choice')!
+  const createVariant = (number: number) => ({
+    variantId: `${session.sessionId}-review-${number}`,
+    title: number === 1 ? `${session.title}：条件变化` : `${session.title}：协作变化`,
+    context: number === 1
+      ? `同一学习目标出现在另一段匿名职场协作中。原有时间条件发生变化，你需要重新判断如何表达，并确认可以执行的下一步。`
+      : `这次沟通对象和协作限制有所不同，但仍需要围绕“${session.objective}”组织表达，避免评价个人。`,
+    question: number === 1 ? '条件变化后，你会怎样回应？' : scenario.question,
+    prompt: number === 1 ? '选择更能管理变化预期的一句话' : '选择更能推动共同确认的一句话',
+    options: choice.options.map((option, optionIndex) => ({
+      ...option,
+      id: `${session.sessionId}-review-${number}-${optionIndex + 1}`,
+      text: `${number === 1 ? '条件变化后' : '对象变化后'}：${option.text}`,
+    })).map((_, optionIndex, options) => options[(optionIndex + index + number) % options.length]!),
+  })
+  // The remote seed is a fresh release snapshot, so its initial entity versions
+  // remain at 1. Existing databases receive the same change through publishing,
+  // where the server performs the normal contentVersion increment.
+  return TrainingSessionSchema.parse({ ...session, reviewVariants: [createVariant(1), createVariant(2)] })
+}
+
+const remoteSessions: Record<string, TrainingSession> = Object.fromEntries([
+  ...Object.values(TrainingContentBundleSchema.parse(trainingContentBundle).sessions).map((session, index) => [session.sessionId, addSeedReviewVariants(session, index)] as const),
+  ...betaProductionPlan.map((spec, index) => [spec.sessionId, buildBetaSession(spec, index)] as const),
+])
+const remoteCatalogs: Record<string, TrainingCatalog> = Object.fromEntries(
+  Object.entries(TrainingContentBundleSchema.parse(trainingContentBundle).catalogs).map(([catalogId, catalog]) => [catalogId, {
+    ...catalog,
+    contentVersion: catalog.contentVersion + 1,
+    sessionIds: [...catalog.sessionIds, ...betaProductionPlan.filter((spec) => spec.catalogId === catalogId).map((spec) => spec.sessionId)],
+  }]),
+)
+
+export const remoteTrainingContentBundle: TrainingContentBundle = TrainingContentBundleSchema.parse({
+  releaseVersion: 1,
+  library: { ...TrainingContentBundleSchema.parse(trainingContentBundle).library, contentVersion: 2 },
+  catalogs: remoteCatalogs,
+  sessions: remoteSessions,
 })
 
 export let currentTrainingContentBundle = trainingContentBundle

@@ -1,4 +1,4 @@
-import { AlertOutlined, BarChartOutlined, CommentOutlined, DatabaseOutlined, ExperimentOutlined, LogoutOutlined } from '@ant-design/icons'
+import { AlertOutlined, BarChartOutlined, CommentOutlined, DatabaseOutlined, ExperimentOutlined, FileAddOutlined, LogoutOutlined } from '@ant-design/icons'
 import { Button, Layout, Menu } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router'
 
@@ -11,7 +11,8 @@ export function AdminLayout() {
   const { logout } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
-  const selected = location.pathname.startsWith('/content') ? '/content'
+  const selected = location.pathname.startsWith('/content/production') ? '/content/production'
+    : location.pathname.startsWith('/content') ? '/content'
       : location.pathname.startsWith('/feedback') ? '/feedback'
       : location.pathname.startsWith('/ai') ? '/ai'
         : location.pathname.startsWith('/operations') ? '/operations' : '/dashboard'
@@ -29,6 +30,7 @@ export function AdminLayout() {
         items={[
           { key: '/dashboard', icon: <BarChartOutlined />, label: '数据概览' },
           { key: '/content', icon: <DatabaseOutlined />, label: '内容管理' },
+          { key: '/content/production', icon: <FileAddOutlined />, label: '内容生产' },
           { key: '/feedback', icon: <CommentOutlined />, label: '反馈处理' },
           { key: '/ai', icon: <ExperimentOutlined />, label: 'AI 点评' },
           { key: '/operations', icon: <AlertOutlined />, label: '运行保障' },

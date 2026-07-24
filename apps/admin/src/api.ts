@@ -15,8 +15,16 @@ import {
   AdminReviewVariantGenerateResponseSchema,
   AdminOperationsResponseSchema,
   AdminClientErrorUpdateResponseSchema,
+  AdminContentGenerationJobListResponseSchema,
+  AdminContentGenerationJobResponseSchema,
+  AdminContentReadinessResponseSchema,
+  AdminContentReviewListResponseSchema,
+  AdminContentReviewResponseSchema,
   type AdminContentDraft,
+  type AdminContentGenerationJob,
   type AdminContentIndex,
+  type AdminContentReadiness,
+  type AdminContentReview,
   type AdminContentReleaseSnapshot,
   type AdminDraftValidation,
   type AdminFeedback,
@@ -26,6 +34,7 @@ import {
   type AdminAiMetrics,
   type AdminReviewVariantGenerate,
   type AdminOperations,
+  type AdminSessionOutline,
 } from '@microly/api-contract'
 
 const TOKEN_KEY = 'microly:admin-token'
@@ -165,6 +174,48 @@ export const adminApi = {
   updateClientError: (token: string, fingerprint: string, status: 'new' | 'in_progress' | 'resolved', internalNote: string | null) => adminRequest(
     `/v1/admin/operations/errors/${fingerprint}`, token,
     { ...json('PATCH', { status, internalNote }), schema: AdminClientErrorUpdateResponseSchema },
+  ),
+  generateSessionOutlines: (token: string, draftId: string, catalogId: string, input: {
+    requestId: string; revision: number; count: number; difficulties: Array<'L1' | 'L2' | 'L3'>; brief: string
+  }) => adminRequest<AdminContentGenerationJob>(
+    `/v1/admin/content/drafts/${encodeURIComponent(draftId)}/catalogs/${encodeURIComponent(catalogId)}/session-outlines/generate`, token,
+    { ...json('POST', input), schema: AdminContentGenerationJobResponseSchema },
+  ),
+  generateTrainingSessions: (token: string, draftId: string, input: {
+    requestId: string; revision: number; outlineJobId: string; outlineIds: string[]; outlines?: AdminSessionOutline[]; reviewVariantCount: 2
+  }) => adminRequest<AdminContentGenerationJob>(
+    `/v1/admin/content/drafts/${encodeURIComponent(draftId)}/sessions/generate`, token,
+    { ...json('POST', input), schema: AdminContentGenerationJobResponseSchema },
+  ),
+  getGenerationJobs: (token: string, draftId: string) => adminRequest<{ items: AdminContentGenerationJob[] }>(
+    `/v1/admin/content/generation-jobs?draftId=${encodeURIComponent(draftId)}`, token,
+    { schema: AdminContentGenerationJobListResponseSchema },
+  ),
+  getGenerationJob: (token: string, jobId: string) => adminRequest<AdminContentGenerationJob>(
+    `/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}`, token,
+    { schema: AdminContentGenerationJobResponseSchema },
+  ),
+  cancelGenerationJob: (token: string, jobId: string) => adminRequest<AdminContentGenerationJob>(
+    `/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}/cancel`, token,
+    { ...json('POST'), schema: AdminContentGenerationJobResponseSchema },
+  ),
+  insertGenerationCandidates: (token: string, jobId: string, revision: number, candidateIds: string[]) => adminRequest<AdminContentDraft>(
+    `/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}/insert`, token,
+    { ...json('POST', { revision, candidateIds }), schema: AdminDraftResponseSchema },
+  ),
+  getContentReviews: (token: string, draftId: string) => adminRequest<{ items: AdminContentReview[] }>(
+    `/v1/admin/content/drafts/${encodeURIComponent(draftId)}/reviews`, token,
+    { schema: AdminContentReviewListResponseSchema },
+  ),
+  reviewSession: (token: string, draftId: string, sessionId: string, input: {
+    revision: number; contentDigest: string; checklist: Record<string, true>; operatorLabel: string; reviewerLabel?: string | null; note?: string | null
+  }) => adminRequest<AdminContentReview>(
+    `/v1/admin/content/drafts/${encodeURIComponent(draftId)}/sessions/${encodeURIComponent(sessionId)}/review`, token,
+    { ...json('PUT', input), schema: AdminContentReviewResponseSchema },
+  ),
+  getContentReadiness: (token: string, draftId: string) => adminRequest<AdminContentReadiness>(
+    `/v1/admin/content/drafts/${encodeURIComponent(draftId)}/readiness`, token,
+    { schema: AdminContentReadinessResponseSchema },
   ),
 }
 

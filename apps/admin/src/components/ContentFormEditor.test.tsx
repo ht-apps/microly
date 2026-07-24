@@ -45,4 +45,24 @@ describe('visual content form', () => {
     expect((screen.getByLabelText('课程标题') as HTMLInputElement).disabled).toBe(true)
     expect(screen.queryByRole('button', { name: '新建章节' })).toBeNull()
   })
+
+  it('只为相对基础版本发生变化的训练提供审核入口', () => {
+    const value = bundle()
+    const sessionId = Object.keys(value.sessions)[0]!
+    const onReviewSession = vi.fn()
+    const { rerender } = render(<ConfigProvider><App><ContentFormEditor
+      bundle={value} issues={[]} selectedKey={`session:${sessionId}`}
+      onSelect={() => undefined} onChange={() => undefined} onReviewSession={onReviewSession}
+    /></App></ConfigProvider>)
+
+    expect(screen.queryByRole('button', { name: '审核训练' })).toBeNull()
+
+    rerender(<ConfigProvider><App><ContentFormEditor
+      bundle={value} issues={[]} selectedKey={`session:${sessionId}`}
+      onSelect={() => undefined} onChange={() => undefined} onReviewSession={onReviewSession}
+      reviewableSessionIds={[sessionId]} unreviewedSessionIds={[sessionId]}
+    /></App></ConfigProvider>)
+
+    expect(screen.getByRole('button', { name: '审核训练' })).toBeTruthy()
+  })
 })

@@ -21,7 +21,8 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core'
-import type { AiEvaluationResult } from '@microly/api-contract'
+import type { AdminContentReview, AdminSessionOutline, AiEvaluationResult } from '@microly/api-contract'
+import type { TrainingSession } from '@microly/content-schema'
 
 export const accounts = pgTable('accounts', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -247,6 +248,46 @@ export const adminAiGenerationRuns = pgTable('admin_ai_generation_runs', {
   failureCode: varchar('failure_code', { length: 80 }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
+
+export const adminContentGenerationJobs = pgTable('admin_content_generation_jobs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  requestId: uuid('request_id').notNull().unique(),
+  draftId: uuid('draft_id').notNull().references(() => contentDrafts.id, { onDelete: 'cascade' }),
+  catalogId: varchar('catalog_id', { length: 100 }).notNull(),
+  draftRevision: integer('draft_revision').notNull(),
+  operation: varchar('operation', { length: 30 }).$type<'session_outlines' | 'training_sessions'>().notNull(),
+  status: varchar('status', { length: 20 }).$type<'queued' | 'processing' | 'succeeded' | 'failed' | 'canceled'>().notNull().default('queued'),
+  requestedCount: integer('requested_count').notNull(),
+  input: jsonb('input').$type<Record<string, unknown>>().notNull().default({}),
+  result: jsonb('result').$type<{ outlines?: AdminSessionOutline[]; candidates?: Array<{ candidateId: string; session: TrainingSession }> }>().notNull().default({}),
+  insertedCandidateIds: jsonb('inserted_candidate_ids').$type<string[]>().notNull().default([]),
+  modelId: varchar('model_id', { length: 100 }),
+  configRevision: integer('config_revision'),
+  promptVersion: varchar('prompt_version', { length: 80 }),
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  completionTokens: integer('completion_tokens').notNull().default(0),
+  estimatedCostUsd: doublePrecision('estimated_cost_usd').notNull().default(0),
+  latencyMs: integer('latency_ms'),
+  formatRetries: integer('format_retries').notNull().default(0),
+  failureCode: varchar('failure_code', { length: 80 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  startedAt: timestamp('started_at', { withTimezone: true }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const contentSessionReviews = pgTable('content_session_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  draftId: uuid('draft_id').notNull().references(() => contentDrafts.id, { onDelete: 'cascade' }),
+  sessionId: varchar('session_id', { length: 100 }).notNull(),
+  contentDigest: varchar('content_digest', { length: 64 }).notNull(),
+  checklist: jsonb('checklist').$type<AdminContentReview['checklist']>().notNull(),
+  operatorLabel: varchar('operator_label', { length: 50 }).notNull(),
+  reviewerLabel: varchar('reviewer_label', { length: 50 }),
+  note: text('note'),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('content_session_reviews_draft_session_idx').on(table.draftId, table.sessionId)])
 
 export const clientErrorReports = pgTable('client_error_reports', {
   id: uuid('id').primaryKey().defaultRandom(),
