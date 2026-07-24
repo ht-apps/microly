@@ -3,7 +3,7 @@ import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
-import { trackEvent } from '../../features/analytics/analytics-client'
+import { trackTrainingStart } from '../../features/analytics/training-analytics'
 import { subscribeToContentUpdates } from '../../features/content/content-client'
 import { readPreferenceSnapshot } from '../../features/preference/preference-snapshot'
 import { formatReviewDate } from '../../features/review/review-state'
@@ -76,13 +76,7 @@ export default function CoursePage() {
       item.session,
       { type: 'START' },
     )
-    if (item.progress.status === 'not_started') {
-      trackEvent('training_start', {
-        sessionId: item.session.sessionId,
-        contentVersion: item.session.contentVersion,
-        entry: 'course',
-      })
-    }
+    trackTrainingStart(item.session, nextProgress, 'course')
     writeTrainingProgress(nextProgress)
     await Taro.navigateTo({ url: trainingUrl(item.sessionId) })
   }
@@ -101,9 +95,10 @@ export default function CoursePage() {
     clearTrainingProgress(item.session)
     const reset = transitionTraining(item.progress, item.session, { type: 'RESET' })
     const started = transitionTraining(reset, item.session, { type: 'START' })
+    trackTrainingStart(item.session, started, 'restart')
     writeTrainingProgress(started)
     setSnapshot(readCourseSnapshot())
-    await Taro.navigateTo({ url: trainingUrl(item.sessionId) })
+    await Taro.navigateTo({ url: `/pages/training/index?sessionId=${item.sessionId}&entry=restart` })
   }
 
   const library = trainingContent.library

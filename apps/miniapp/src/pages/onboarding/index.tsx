@@ -7,6 +7,7 @@ import {
   trainingContent,
 } from '../../data/training-content'
 import { trackEvent } from '../../features/analytics/analytics-client'
+import { trackTrainingStart } from '../../features/analytics/training-analytics'
 import { toggleCatalogPreference } from '../../features/preference/preference-state'
 import {
   resolveStoredOnboarding,
@@ -82,18 +83,12 @@ export default function OnboardingPage() {
       return
     }
     const stored = readTrainingProgress(session)
-    if (stored.progress.status === 'not_started') {
-      trackEvent('training_start', {
-        sessionId: session.sessionId,
-        contentVersion: session.contentVersion,
-        entry: 'onboarding',
-      })
-    }
     const started = transitionTraining(
       stored.progress,
       session,
       { type: 'START' },
     )
+    trackTrainingStart(session, started, 'onboarding')
     if (!writeTrainingProgress(started)) {
       Taro.showToast({ title: '进度暂未保存，请保持页面开启', icon: 'none' })
     }

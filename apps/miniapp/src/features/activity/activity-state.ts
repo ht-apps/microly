@@ -18,6 +18,8 @@ export type LearningActivityEvent =
       variantId?: string | null
       selectedOptionRating?: 'recommended' | 'risky' | 'not_recommended'
       isCorrect?: boolean
+      scheduledDueAt?: string
+      intervalDaysBefore?: 1 | 3 | 7 | 14
     }
 
 export interface LearningWeekDay {
@@ -90,7 +92,7 @@ export function createTrainingCompletedEvent(
 }
 
 export function createDueReviewAnsweredEvent(
-  item: Pick<ReviewItem, 'dueAt' | 'reviewId' | 'sessionId'>,
+  item: Pick<ReviewItem, 'dueAt' | 'reviewId' | 'sessionId' | 'intervalDays'>,
   answeredAt: string,
   result?: { variantId: string | null; selectedOptionRating: 'recommended' | 'risky' | 'not_recommended'; isCorrect: boolean },
 ): LearningActivityEvent | null {
@@ -103,6 +105,8 @@ export function createDueReviewAnsweredEvent(
     localDateKey: toLocalDateKey(answeredAt),
     sessionId: item.sessionId,
     reviewId: item.reviewId,
+    scheduledDueAt: item.dueAt,
+    intervalDaysBefore: item.intervalDays,
     ...(result ? { variantId: result.variantId, selectedOptionRating: result.selectedOptionRating, isCorrect: result.isCorrect } : {}),
   }
 }

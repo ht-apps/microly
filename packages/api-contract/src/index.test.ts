@@ -9,6 +9,7 @@ import {
   AdminFeedbackListResponseSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminMetricsResponseSchema,
+  AdminLearningQualityResponseSchema,
   AdminReviewVariantGenerateResponseSchema,
   AdminOutlineGenerateRequestSchema,
   AdminContentGenerationJobResponseSchema,
@@ -22,14 +23,20 @@ import {
   AdminOperationsResponseSchema,
   SyncRequestSchema,
   TrainingCompletionSchema,
+  ContentQualityIssueUpdateRequestSchema,
 } from './index'
 
 const event = {
   eventId: '11111111-1111-4111-8111-111111111111',
+  visitId: '21111111-1111-4111-8111-111111111111',
   name: 'training_complete',
   occurredAt: '2026-07-23T10:00:00.000Z',
+  localDateKey: '2026-07-23',
+  timezoneOffsetMinutes: -480,
   properties: {
+    attemptId: 'attempt:boundary-decline-001:test',
     sessionId: 'boundary-decline-001',
+    releaseVersion: 1,
     contentVersion: 1,
     durationMs: 120000,
     practiceUsed: true,
@@ -151,6 +158,34 @@ describe('API contract', () => {
     }
     expect(AdminMetricsResponseSchema.safeParse(value).success).toBe(true)
     expect(AdminMetricsResponseSchema.safeParse({ ...value, data: { ...value.data, accountId: '11111111-1111-4111-8111-111111111111' } }).success).toBe(false)
+  })
+
+  it('严格校验学习质量聚合与问题处理', () => {
+    const response = { data: {
+      window: '30d', generatedAt: '2026-07-24T10:00:00.000Z', coverageStartedAt: null,
+      selectedReleaseVersion: 2, currentReleaseVersion: 2,
+      filters: { releases: [], catalogs: [], sessions: [] },
+      summary: {
+        firstOpenAccounts: 0, firstTrainingStartedAccounts: 0, firstTrainingStartRate: null,
+        firstTrainingCompletedAccounts: 0, firstTrainingCompletionRate: null,
+        d1EligibleAccounts: 0, d1RetainedAccounts: 0, d1RetentionRate: null,
+        sevenDayEligibleAccounts: 0, sevenDayThreePracticeAccounts: 0, sevenDayThreePracticeRate: null,
+        completedAttempts: 0, activePracticeRate: null, medianDurationMs: null,
+        dueReviewOccurrences: 0, dueReviewCompleted: 0, dueReviewCompletionRate: null,
+        welAccounts: 0, openIssueCount: 0,
+      },
+      retentionTrend: [], sessions: [], issues: [],
+    } }
+    expect(AdminLearningQualityResponseSchema.safeParse(response).success).toBe(true)
+    expect(AdminLearningQualityResponseSchema.safeParse({
+      data: { ...response.data, accountIds: ['不应返回账号明细'] },
+    }).success).toBe(false)
+    expect(ContentQualityIssueUpdateRequestSchema.safeParse({
+      status: 'resolved', internalNote: '已修正并重新发布',
+    }).success).toBe(true)
+    expect(ContentQualityIssueUpdateRequestSchema.safeParse({
+      status: 'dismissed', internalNote: '',
+    }).success).toBe(false)
   })
 
   it('严格校验后台复习变体候选', () => {

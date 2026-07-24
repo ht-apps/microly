@@ -13,6 +13,7 @@ const FeedbackPage = lazy(() => import('./pages/FeedbackPage'))
 const AiPage = lazy(() => import('./pages/AiPage'))
 const OperationsPage = lazy(() => import('./pages/OperationsPage'))
 const ContentProductionPage = lazy(() => import('./pages/ContentProductionPage'))
+const LearningQualityPage = lazy(() => import('./pages/LearningQualityPage'))
 
 function Protected({ children }: { children: ReactNode }) {
   const { token } = useAuth()
@@ -30,6 +31,7 @@ export const router = createHashRouter([
     element: <Protected><AdminLayout /></Protected>,
     children: [
       { path: '/dashboard', element: <RouteFallback><DashboardPage /></RouteFallback> },
+      { path: '/learning-quality', element: <RouteFallback><LearningQualityPage /></RouteFallback> },
       { path: '/content', element: <RouteFallback><ContentPage /></RouteFallback> },
       { path: '/content/drafts/:draftId', element: <RouteFallback><ContentPage /></RouteFallback> },
       { path: '/content/production', element: <RouteFallback><ContentProductionPage /></RouteFallback> },

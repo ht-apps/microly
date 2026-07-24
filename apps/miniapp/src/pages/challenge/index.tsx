@@ -20,6 +20,7 @@ import {
 } from '../../features/challenge/challenge-share'
 import { createCourseOverview } from '../../features/training/course-overview'
 import { transitionTraining } from '../../features/training/training-state'
+import { trackTrainingStart } from '../../features/analytics/training-analytics'
 import {
   readAllTrainingProgress,
   readTrainingProgress,
@@ -113,11 +114,12 @@ export default function ChallengePage() {
       targetSession,
       { type: 'START' },
     )
+    trackTrainingStart(targetSession, started, 'challenge')
     if (!writeTrainingProgress(started)) {
       Taro.showToast({ title: '进度暂未保存，请保持页面开启', icon: 'none' })
     }
     await Taro.redirectTo({
-      url: `/pages/training/index?sessionId=${targetSession.sessionId}`,
+      url: `/pages/training/index?sessionId=${targetSession.sessionId}&entry=challenge`,
     })
   }
 

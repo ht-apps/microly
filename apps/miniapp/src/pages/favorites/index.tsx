@@ -7,6 +7,7 @@ import { setSessionFavorite, syncFavoriteQueue } from '../../features/favorite/f
 import { flushFullSync } from '../../features/sync/state-sync'
 import type { ResolvedFavoriteItem } from '../../features/favorite/favorite-state'
 import { transitionTraining } from '../../features/training/training-state'
+import { trackTrainingStart } from '../../features/analytics/training-analytics'
 import {
   clearTrainingProgress,
   readTrainingProgress,
@@ -57,12 +58,13 @@ export default function FavoritesPage() {
     clearTrainingProgress(entry.session)
     const reset = transitionTraining(stored.progress, entry.session, { type: 'RESET' })
     const started = transitionTraining(reset, entry.session, { type: 'START' })
+    trackTrainingStart(entry.session, started, 'favorites')
     if (!writeTrainingProgress(started)) {
       setStorageWarning(true)
       return
     }
     await Taro.navigateTo({
-      url: `/pages/training/index?sessionId=${entry.session.sessionId}`,
+      url: `/pages/training/index?sessionId=${entry.session.sessionId}&entry=favorites`,
     })
   }
 

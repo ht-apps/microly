@@ -26,6 +26,7 @@ import { RuntimeMetrics } from './runtime-metrics.js'
 import { createDatabase, type DatabaseContext } from './db/client.js'
 import {
   accounts,
+  analyticsAccountFacts,
   analyticsEvents,
   authSessions,
   clientErrorReports,
@@ -35,6 +36,7 @@ import {
   guestIdentities,
   learningActivityEvents,
   reviewStates,
+  reviewScheduleOccurrences,
   syncRequests,
   trainingCompletions,
   trainingProgressStates,
@@ -44,6 +46,7 @@ import {
 
 const SESSION_LIFETIME_MS = 90 * 24 * 60 * 60 * 1000
 const MAX_FUTURE_MS = 5 * 60 * 1000
+const ANALYTICS_MAX_AGE_MS = 31 * 24 * 60 * 60 * 1000
 
 function hashSecret(value: string) {
   return createHash('sha256').update(value).digest('hex')
@@ -118,6 +121,34 @@ function matchingSession(bundles: TrainingContentBundle[], sessionId: string, ve
   })[0]
 }
 
+function matchingReleaseSession(bundles: TrainingContentBundle[], releaseVersion: number, sessionId: string, contentVersion: number) {
+  const bundle = bundles.find((item) => item.releaseVersion === releaseVersion)
+  const session = bundle?.sessions[sessionId]
+  return session?.contentVersion === contentVersion ? session : undefined
+}
+
+function localDateForOffset(occurredAt: string, offsetMinutes: number) {
+  const local = new Date(Date.parse(occurredAt) - offsetMinutes * 60_000)
+  return `${local.getUTCFullYear()}-${String(local.getUTCMonth() + 1).padStart(2, '0')}-${String(local.getUTCDate()).padStart(2, '0')}`
+}
+
+function validAnalyticsContent(event: import('@microly/api-contract').AnalyticsEvent, bundles: TrainingContentBundle[]) {
+  if (!['training_start', 'training_card_view', 'option_select', 'training_complete'].includes(event.name)) return true
+  const properties = event.properties as Record<string, unknown>
+  const session = matchingReleaseSession(bundles, Number(properties.releaseVersion), String(properties.sessionId), Number(properties.contentVersion))
+  if (!session) return false
+  if (event.name === 'training_card_view') {
+    const card = session.cards[Number(event.properties.cardIndex)]
+    return card?.id === event.properties.cardId && card.type === event.properties.cardType
+  }
+  if (event.name === 'option_select') {
+    const choice = session.cards.find((card) => card.type === 'choice')
+    const option = choice?.options[event.properties.displayPosition]
+    return option?.id === event.properties.optionId && option.rating === event.properties.rating
+  }
+  return true
+}
+
 function isFuture(value: string | null | undefined) {
   return Boolean(value && Date.parse(value) > Date.now() + MAX_FUTURE_MS)
 }
@@ -170,6 +201,18 @@ async function mergeAccounts(database: DatabaseContext, sourceId: string, target
       AND NOT EXISTS (SELECT 1 FROM training_completions target WHERE target.account_id = $2 AND target.sync_id = source.sync_id)`, [sourceId, targetId])
     await client.query('DELETE FROM training_completions WHERE account_id = $1', [sourceId])
     await client.query('UPDATE analytics_events SET account_id = $2 WHERE account_id = $1', [sourceId, targetId])
+    await client.query(`INSERT INTO analytics_account_facts (account_id, first_opened_at, first_opened_local_date, timezone_offset_minutes)
+      SELECT $2, first_opened_at, first_opened_local_date, timezone_offset_minutes FROM analytics_account_facts WHERE account_id = $1
+      ON CONFLICT (account_id) DO UPDATE SET first_opened_at = LEAST(analytics_account_facts.first_opened_at, excluded.first_opened_at),
+      first_opened_local_date = LEAST(analytics_account_facts.first_opened_local_date, excluded.first_opened_local_date),
+      timezone_offset_minutes = CASE WHEN excluded.first_opened_at < analytics_account_facts.first_opened_at THEN excluded.timezone_offset_minutes ELSE analytics_account_facts.timezone_offset_minutes END,
+      updated_at = now()`, [sourceId, targetId])
+    await client.query('DELETE FROM analytics_account_facts WHERE account_id = $1', [sourceId])
+    await client.query(`INSERT INTO review_schedule_occurrences (account_id, review_id, session_id, content_version, scheduled_due_at, interval_days, answered_at, created_at, updated_at)
+      SELECT $2, review_id, session_id, content_version, scheduled_due_at, interval_days, answered_at, created_at, updated_at
+      FROM review_schedule_occurrences WHERE account_id = $1
+      ON CONFLICT (account_id, review_id, scheduled_due_at) DO UPDATE SET answered_at = COALESCE(review_schedule_occurrences.answered_at, excluded.answered_at), updated_at = now()`, [sourceId, targetId])
+    await client.query('DELETE FROM review_schedule_occurrences WHERE account_id = $1', [sourceId])
     await client.query('UPDATE client_error_reports SET account_id = $2 WHERE account_id = $1', [sourceId, targetId])
     await client.query('UPDATE feedback SET account_id = $2 WHERE account_id = $1', [sourceId, targetId])
     await client.query(`UPDATE learning_activity_events source SET account_id = $2 WHERE source.account_id = $1
@@ -356,6 +399,9 @@ export function createApp(options: CreateAppOptions) {
     if (!principal) return
     const input = SyncRequestSchema.parse(request.body)
     const bundles = await readBundles(database)
+    if (input.activities.some((value) => value.type === 'due_review_answered' && (!value.scheduledDueAt || !value.intervalDaysBefore))) {
+      return error(reply, 422, 'review_occurrence_required', '到期复习记录缺少计划到期时间或复习前间隔。')
+    }
     const timestamps = [
       input.preference?.completedAt, input.preference?.updatedAt,
       ...input.favorites.flatMap((v) => [v.createdAt, v.updatedAt]),
@@ -396,13 +442,30 @@ export function createApp(options: CreateAppOptions) {
       for (const value of input.reviews) {
         const [stored] = await tx.select().from(reviewStates).where(and(eq(reviewStates.accountId, principal.accountId), eq(reviewStates.reviewId, value.reviewId))).limit(1)
         if (!stored || candidateWins(value, stored.value)) await tx.insert(reviewStates).values({ accountId: principal.accountId, reviewId: value.reviewId, value, updatedAt: new Date(value.updatedAt) }).onConflictDoUpdate({ target: [reviewStates.accountId, reviewStates.reviewId], set: { value, updatedAt: new Date(value.updatedAt) } })
+        await tx.insert(reviewScheduleOccurrences).values({
+          accountId: principal.accountId, reviewId: value.reviewId, sessionId: value.sessionId,
+          contentVersion: value.contentVersion, scheduledDueAt: new Date(value.dueAt), intervalDays: value.intervalDays,
+        }).onConflictDoNothing({ target: [reviewScheduleOccurrences.accountId, reviewScheduleOccurrences.reviewId, reviewScheduleOccurrences.scheduledDueAt] })
       }
       for (const value of input.progress) {
         const [stored] = await tx.select().from(trainingProgressStates).where(and(eq(trainingProgressStates.accountId, principal.accountId), eq(trainingProgressStates.sessionId, value.sessionId))).limit(1)
         const sameAttemptCompleted = stored?.value.attemptId === value.attemptId && stored.value.status === 'completed' && value.status !== 'completed'
         if (!sameAttemptCompleted && (!stored || candidateWins(value, stored.value))) await tx.insert(trainingProgressStates).values({ accountId: principal.accountId, sessionId: value.sessionId, value, updatedAt: new Date(value.updatedAt) }).onConflictDoUpdate({ target: [trainingProgressStates.accountId, trainingProgressStates.sessionId], set: { value, updatedAt: new Date(value.updatedAt) } })
       }
-      for (const value of input.activities) await tx.insert(learningActivityEvents).values({ eventId: value.eventId, accountId: principal.accountId, value, occurredAt: new Date(value.occurredAt) }).onConflictDoNothing({ target: [learningActivityEvents.accountId, learningActivityEvents.eventId] })
+      for (const value of input.activities) {
+        await tx.insert(learningActivityEvents).values({ eventId: value.eventId, accountId: principal.accountId, value, occurredAt: new Date(value.occurredAt) }).onConflictDoNothing({ target: [learningActivityEvents.accountId, learningActivityEvents.eventId] })
+        if (value.type === 'due_review_answered' && value.scheduledDueAt && value.intervalDaysBefore) {
+          await tx.insert(reviewScheduleOccurrences).values({
+            accountId: principal.accountId, reviewId: value.reviewId, sessionId: value.sessionId,
+            contentVersion: input.reviews.find((review) => review.reviewId === value.reviewId)?.contentVersion ?? 1,
+            scheduledDueAt: new Date(value.scheduledDueAt), intervalDays: value.intervalDaysBefore,
+            answeredAt: new Date(value.occurredAt), updatedAt: new Date(),
+          }).onConflictDoUpdate({
+            target: [reviewScheduleOccurrences.accountId, reviewScheduleOccurrences.reviewId, reviewScheduleOccurrences.scheduledDueAt],
+            set: { answeredAt: new Date(value.occurredAt), updatedAt: new Date() },
+          })
+        }
+      }
       await tx.insert(syncRequests).values({ requestId: input.requestId, accountId: principal.accountId })
         .onConflictDoNothing({ target: [syncRequests.accountId, syncRequests.requestId] })
     })
@@ -423,10 +486,40 @@ export function createApp(options: CreateAppOptions) {
     const principal = await authenticate(request, reply, database)
     if (!principal) return
     const batch = AnalyticsBatchRequestSchema.parse(request.body)
+    const now = Date.now()
+    if (batch.events.some((event) => {
+      const occurred = Date.parse(event.occurredAt)
+      return occurred > now + MAX_FUTURE_MS
+        || occurred < now - ANALYTICS_MAX_AGE_MS
+        || event.localDateKey !== localDateForOffset(event.occurredAt, event.timezoneOffsetMinutes)
+    })) return error(reply, 422, 'invalid_event_timestamp', '埋点时间或设备自然日无效。')
+    const bundles = await readBundles(database)
+    if (batch.events.some((event) => !validAnalyticsContent(event, bundles))) {
+      return error(reply, 422, 'invalid_event_content', '埋点引用了无效课程内容。')
+    }
+    await database.pool.query(`DELETE FROM analytics_events WHERE received_at < now() - interval '90 days'`)
     let accepted = 0
     for (const event of batch.events) {
-      const inserted = await database.db.insert(analyticsEvents).values({ eventId: event.eventId, accountId: principal.accountId, name: event.name, occurredAt: new Date(event.occurredAt), properties: event.properties }).onConflictDoNothing({ target: analyticsEvents.eventId }).returning({ eventId: analyticsEvents.eventId })
+      const inserted = await database.db.insert(analyticsEvents).values({
+        eventId: event.eventId, accountId: principal.accountId, visitId: event.visitId, name: event.name,
+        occurredAt: new Date(event.occurredAt), localDateKey: event.localDateKey,
+        timezoneOffsetMinutes: event.timezoneOffsetMinutes, properties: event.properties,
+      }).onConflictDoNothing({ target: analyticsEvents.eventId }).returning({ eventId: analyticsEvents.eventId })
       accepted += inserted.length
+      if (event.name === 'app_open') {
+        await database.db.insert(analyticsAccountFacts).values({
+          accountId: principal.accountId, firstOpenedAt: new Date(event.occurredAt),
+          firstOpenedLocalDate: event.localDateKey, timezoneOffsetMinutes: event.timezoneOffsetMinutes,
+        }).onConflictDoUpdate({
+          target: analyticsAccountFacts.accountId,
+          set: { updatedAt: new Date() },
+        })
+        await database.pool.query(`UPDATE analytics_account_facts SET
+          first_opened_at = LEAST(first_opened_at, $2::timestamptz),
+          first_opened_local_date = LEAST(first_opened_local_date, $3::date),
+          timezone_offset_minutes = CASE WHEN $2::timestamptz < first_opened_at THEN $4 ELSE timezone_offset_minutes END,
+          updated_at = now() WHERE account_id = $1`, [principal.accountId, event.occurredAt, event.localDateKey, event.timezoneOffsetMinutes])
+      }
     }
     return reply.send({ data: { accepted } })
   })

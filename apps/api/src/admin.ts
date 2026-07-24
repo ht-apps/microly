@@ -9,6 +9,7 @@ import {
   AdminFeedbackStatusSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminClientErrorUpdateRequestSchema,
+  ContentQualityIssueUpdateRequestSchema,
   AdminGenerationJobInsertRequestSchema,
   AdminOutlineGenerateRequestSchema,
   AdminPublishRequestSchema,
@@ -25,6 +26,7 @@ import type { DatabaseContext } from './db/client.js'
 import { checksumBundle } from './db/seed.js'
 import { activeConfig, AiProviderValidationError, type AiProvider } from './ai.js'
 import type { RuntimeMetrics } from './runtime-metrics.js'
+import { buildLearningQuality } from './learning-quality.js'
 
 const feedbackCategories = ['content_error', 'product_suggestion', 'inappropriate_content'] as const
 const funnelNames = ['app_open', 'onboarding_view', 'training_start', 'option_select', 'training_complete', 'wechat_login_success'] as const
@@ -1178,6 +1180,42 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
         weeklyReportActions: Number(reportStats.rows[0].actions),
       },
     } })
+  })
+
+  app.get('/v1/admin/learning-quality', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const input = z.object({
+      window: z.enum(['7d', '30d']).default('30d'),
+      releaseVersion: z.coerce.number().int().positive().optional(),
+      catalogId: z.string().regex(/^[a-z0-9-]+$/).optional(),
+      sessionId: z.string().regex(/^[a-z0-9-]+$/).optional(),
+    }).parse(request.query)
+    return reply.send({ data: await buildLearningQuality(database, input) })
+  })
+
+  app.patch('/v1/admin/learning-quality/issues/:issueKey', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const { issueKey } = z.object({ issueKey: z.string().regex(/^[a-f0-9]{64}$/) }).parse(request.params)
+    const input = ContentQualityIssueUpdateRequestSchema.parse(request.body)
+    const [thirtyDay, sevenDay] = await Promise.all([
+      buildLearningQuality(database, { window: '30d' }),
+      buildLearningQuality(database, { window: '7d' }),
+    ])
+    const issue = thirtyDay.issues.find((item) => item.issueKey === issueKey)
+      ?? sevenDay.issues.find((item) => item.issueKey === issueKey)
+    if (!issue) return sendError(reply, 404, 'content_quality_issue_not_found', '当前版本中没有这条待优化信号。')
+    const resolved = ['resolved', 'dismissed'].includes(input.status)
+    await database.pool.query(`INSERT INTO content_quality_issue_states
+      (issue_key, release_version, session_id, signal, status, internal_note, metric_snapshot, resolved_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,CASE WHEN $8 THEN now() ELSE NULL END)
+      ON CONFLICT (issue_key) DO UPDATE SET status=excluded.status, internal_note=excluded.internal_note,
+      metric_snapshot=excluded.metric_snapshot, updated_at=now(), resolved_at=excluded.resolved_at`, [
+      issueKey, issue.releaseVersion, issue.sessionId, issue.signal, input.status, input.internalNote ?? null,
+      JSON.stringify({ value: issue.value, threshold: issue.threshold, sampleSize: issue.sampleSize }), resolved,
+    ])
+    await database.pool.query(`INSERT INTO admin_audit_logs (action, target_type, target_id, metadata)
+      VALUES ('content.quality.status.update','content_quality_issue',$1,$2::jsonb)`, [issueKey, JSON.stringify({ status: input.status, sessionId: issue.sessionId, releaseVersion: issue.releaseVersion })])
+    return reply.send({ data: { ...issue, status: input.status, internalNote: input.internalNote ?? null, updatedAt: new Date().toISOString() } })
   })
 
   app.get('/v1/admin/operations', async (request, reply) => {

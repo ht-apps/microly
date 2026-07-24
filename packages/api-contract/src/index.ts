@@ -5,6 +5,7 @@ const IsoTimeSchema = z.iso.datetime({ offset: true })
 const IdentifierSchema = z.string().min(1).max(160)
 const SessionIdSchema = z.string().regex(/^[a-z0-9-]+$/)
 const ContentVersionSchema = z.number().int().positive()
+const LocalDateKeySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 
 export const ApiErrorSchema = z.object({
   error: z.object({
@@ -84,20 +85,36 @@ const PreferenceSubmitPropertiesSchema = z.object({
   skipped: z.boolean(),
 }).strict()
 const TrainingStartPropertiesSchema = z.object({
-  sessionId: z.string().max(80),
-  contentVersion: z.number().int().positive(),
-  entry: z.enum(['onboarding', 'today', 'course', 'challenge']),
+  attemptId: IdentifierSchema,
+  sessionId: SessionIdSchema,
+  releaseVersion: ContentVersionSchema,
+  contentVersion: ContentVersionSchema,
+  entry: z.enum(['onboarding', 'today', 'course', 'favorites', 'weekly_report', 'challenge', 'restart', 'direct']),
+}).strict()
+const TrainingCardViewPropertiesSchema = z.object({
+  attemptId: IdentifierSchema,
+  sessionId: SessionIdSchema,
+  releaseVersion: ContentVersionSchema,
+  contentVersion: ContentVersionSchema,
+  cardId: SessionIdSchema,
+  cardType: z.enum(['scenario', 'choice', 'feedback', 'principle', 'practice', 'completion']),
+  cardIndex: z.number().int().min(0).max(20),
+  isResume: z.boolean(),
 }).strict()
 const OptionSelectPropertiesSchema = z.object({
-  sessionId: z.string().max(80),
-  contentVersion: z.number().int().positive(),
-  optionId: z.string().max(80),
+  attemptId: IdentifierSchema,
+  sessionId: SessionIdSchema,
+  releaseVersion: ContentVersionSchema,
+  contentVersion: ContentVersionSchema,
+  optionId: SessionIdSchema,
   displayPosition: z.number().int().min(0).max(10),
   rating: z.enum(['recommended', 'risky', 'not_recommended']),
 }).strict()
 const TrainingCompletePropertiesSchema = z.object({
-  sessionId: z.string().max(80),
-  contentVersion: z.number().int().positive(),
+  attemptId: IdentifierSchema,
+  sessionId: SessionIdSchema,
+  releaseVersion: ContentVersionSchema,
+  contentVersion: ContentVersionSchema,
   durationMs: z.number().int().nonnegative(),
   practiceUsed: z.boolean(),
 }).strict()
@@ -121,8 +138,11 @@ const WeeklyReportActionPropertiesSchema = z.object({
 function event<Name extends string, Schema extends z.ZodType>(name: Name, properties: Schema) {
   return z.object({
     eventId: z.uuid(),
+    visitId: z.uuid(),
     name: z.literal(name),
     occurredAt: IsoTimeSchema,
+    localDateKey: LocalDateKeySchema,
+    timezoneOffsetMinutes: z.number().int().min(-840).max(840),
     properties,
   }).strict()
 }
@@ -132,6 +152,7 @@ export const AnalyticsEventSchema = z.discriminatedUnion('name', [
   event('onboarding_view', OnboardingViewPropertiesSchema),
   event('preference_submit', PreferenceSubmitPropertiesSchema),
   event('training_start', TrainingStartPropertiesSchema),
+  event('training_card_view', TrainingCardViewPropertiesSchema),
   event('option_select', OptionSelectPropertiesSchema),
   event('training_complete', TrainingCompletePropertiesSchema),
   event('login_prompt', LoginPromptPropertiesSchema),
@@ -215,19 +236,21 @@ export const LearningActivitySyncRecordSchema = z.discriminatedUnion('type', [
     eventId: IdentifierSchema,
     type: z.literal('training_completed'),
     occurredAt: IsoTimeSchema,
-    localDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    localDateKey: LocalDateKeySchema,
     sessionId: SessionIdSchema,
   }).strict(),
   z.object({
     eventId: IdentifierSchema,
     type: z.literal('due_review_answered'),
     occurredAt: IsoTimeSchema,
-    localDateKey: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    localDateKey: LocalDateKeySchema,
     sessionId: SessionIdSchema,
     reviewId: IdentifierSchema,
     variantId: SessionIdSchema.nullable().optional(),
     selectedOptionRating: z.enum(['recommended', 'risky', 'not_recommended']).optional(),
     isCorrect: z.boolean().optional(),
+    scheduledDueAt: IsoTimeSchema.optional(),
+    intervalDaysBefore: z.union([z.literal(1), z.literal(3), z.literal(7), z.literal(14)]).optional(),
   }).strict(),
 ])
 
@@ -660,6 +683,137 @@ export const AdminMetricsResponseSchema = z.object({
   }).strict(),
 }).strict()
 
+export const ContentQualityIssueStatusSchema = z.enum(['open', 'in_progress', 'resolved', 'dismissed'])
+export const ContentQualitySignalSchema = z.enum([
+  'low_completion',
+  'duration_outlier',
+  'low_practice',
+  'high_card_exit',
+  'weak_review_variant',
+  'content_feedback',
+])
+
+const NullableRateSchema = z.number().min(0).max(1).nullable()
+const LearningQualitySummarySchema = z.object({
+  firstOpenAccounts: z.number().int().nonnegative(),
+  firstTrainingStartedAccounts: z.number().int().nonnegative(),
+  firstTrainingStartRate: NullableRateSchema,
+  firstTrainingCompletedAccounts: z.number().int().nonnegative(),
+  firstTrainingCompletionRate: NullableRateSchema,
+  d1EligibleAccounts: z.number().int().nonnegative(),
+  d1RetainedAccounts: z.number().int().nonnegative(),
+  d1RetentionRate: NullableRateSchema,
+  sevenDayEligibleAccounts: z.number().int().nonnegative(),
+  sevenDayThreePracticeAccounts: z.number().int().nonnegative(),
+  sevenDayThreePracticeRate: NullableRateSchema,
+  completedAttempts: z.number().int().nonnegative(),
+  activePracticeRate: NullableRateSchema,
+  medianDurationMs: z.number().int().nonnegative().nullable(),
+  dueReviewOccurrences: z.number().int().nonnegative(),
+  dueReviewCompleted: z.number().int().nonnegative(),
+  dueReviewCompletionRate: NullableRateSchema,
+  welAccounts: z.number().int().nonnegative(),
+  openIssueCount: z.number().int().nonnegative(),
+}).strict()
+
+const LearningQualityCardSchema = z.object({
+  cardId: SessionIdSchema,
+  cardType: z.enum(['scenario', 'choice', 'feedback', 'principle', 'practice', 'completion']),
+  cardIndex: z.number().int().nonnegative(),
+  views: z.number().int().nonnegative(),
+  matureViews: z.number().int().nonnegative(),
+  exits: z.number().int().nonnegative(),
+  exitRate: NullableRateSchema,
+}).strict()
+
+const LearningQualitySessionSchema = z.object({
+  sessionId: SessionIdSchema,
+  title: z.string(),
+  catalogId: SessionIdSchema,
+  catalogTitle: z.string(),
+  releaseVersion: ContentVersionSchema,
+  contentVersion: ContentVersionSchema,
+  starts: z.number().int().nonnegative(),
+  completions: z.number().int().nonnegative(),
+  completionRate: NullableRateSchema,
+  medianDurationMs: z.number().int().nonnegative().nullable(),
+  activePracticeRate: NullableRateSchema,
+  optionRatings: z.object({
+    recommended: z.number().int().nonnegative(),
+    risky: z.number().int().nonnegative(),
+    not_recommended: z.number().int().nonnegative(),
+  }).strict(),
+  feedbackCount: z.number().int().nonnegative(),
+  sampleSufficient: z.boolean(),
+  topExitCard: LearningQualityCardSchema.nullable(),
+  cards: z.array(LearningQualityCardSchema).max(6),
+  originalReviewAnswers: z.number().int().nonnegative(),
+  originalReviewCorrectRate: NullableRateSchema,
+  variantReviewAnswers: z.number().int().nonnegative(),
+  variantReviewCorrectRate: NullableRateSchema,
+  versionHistory: z.array(z.object({
+    releaseVersion: ContentVersionSchema,
+    contentVersion: ContentVersionSchema,
+    starts: z.number().int().nonnegative(),
+    completions: z.number().int().nonnegative(),
+    completionRate: NullableRateSchema,
+    medianDurationMs: z.number().int().nonnegative().nullable(),
+  }).strict()),
+}).strict()
+
+export const ContentQualityIssueSchema = z.object({
+  issueKey: z.string().regex(/^[a-f0-9]{64}$/),
+  signal: ContentQualitySignalSchema,
+  severity: z.enum(['attention', 'critical']),
+  releaseVersion: ContentVersionSchema,
+  sessionId: SessionIdSchema,
+  sessionTitle: z.string(),
+  value: z.number().nullable(),
+  threshold: z.number().nullable(),
+  sampleSize: z.number().int().nonnegative(),
+  message: z.string(),
+  status: ContentQualityIssueStatusSchema,
+  internalNote: z.string().nullable(),
+  updatedAt: IsoTimeSchema.nullable(),
+}).strict()
+
+export const AdminLearningQualityResponseSchema = z.object({
+  data: z.object({
+    window: z.enum(['7d', '30d']),
+    generatedAt: IsoTimeSchema,
+    coverageStartedAt: IsoTimeSchema.nullable(),
+    selectedReleaseVersion: ContentVersionSchema,
+    currentReleaseVersion: ContentVersionSchema,
+    filters: z.object({
+      releases: z.array(z.object({ releaseVersion: ContentVersionSchema, publishedAt: IsoTimeSchema }).strict()),
+      catalogs: z.array(z.object({ catalogId: SessionIdSchema, title: z.string() }).strict()),
+      sessions: z.array(z.object({ sessionId: SessionIdSchema, title: z.string(), catalogId: SessionIdSchema }).strict()),
+    }).strict(),
+    summary: LearningQualitySummarySchema,
+    retentionTrend: z.array(z.object({
+      date: LocalDateKeySchema,
+      firstCompletions: z.number().int().nonnegative(),
+      d1Eligible: z.number().int().nonnegative(),
+      d1Retained: z.number().int().nonnegative(),
+      sevenDayEligible: z.number().int().nonnegative(),
+      sevenDayThreePractice: z.number().int().nonnegative(),
+    }).strict()),
+    sessions: z.array(LearningQualitySessionSchema),
+    issues: z.array(ContentQualityIssueSchema),
+  }).strict(),
+}).strict()
+
+export const ContentQualityIssueUpdateRequestSchema = z.object({
+  status: ContentQualityIssueStatusSchema,
+  internalNote: z.string().trim().max(500).nullable().optional(),
+}).strict().superRefine((value, context) => {
+  if (['resolved', 'dismissed'].includes(value.status) && (!value.internalNote || value.internalNote.length < 2)) {
+    context.addIssue({ code: 'custom', path: ['internalNote'], message: '结束问题时请填写至少 2 个字的处理说明。' })
+  }
+})
+
+export const ContentQualityIssueUpdateResponseSchema = z.object({ data: ContentQualityIssueSchema }).strict()
+
 export const AdminSessionResponseSchema = z.object({
   data: z.object({ authenticated: z.literal(true) }).strict(),
 }).strict()
@@ -797,6 +951,8 @@ export type AdminContentRelease = z.infer<typeof AdminContentReleaseSchema>
 export type AdminContentReleaseSnapshot = z.infer<typeof AdminContentReleaseSnapshotResponseSchema>['data']
 export type AdminFeedback = z.infer<typeof AdminFeedbackSchema>
 export type AdminMetrics = z.infer<typeof AdminMetricsResponseSchema>['data']
+export type AdminLearningQuality = z.infer<typeof AdminLearningQualityResponseSchema>['data']
+export type ContentQualityIssue = z.infer<typeof ContentQualityIssueSchema>
 export type AdminContentIndex = z.infer<typeof AdminContentIndexResponseSchema>['data']
 export type AdminDraftValidation = z.infer<typeof AdminDraftValidationResponseSchema>['data']
 export type AdminFeedbackList = z.infer<typeof AdminFeedbackListResponseSchema>['data']

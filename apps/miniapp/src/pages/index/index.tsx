@@ -3,7 +3,7 @@ import { Button, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
 import { trainingContent } from '../../data/training-content'
-import { trackEvent } from '../../features/analytics/analytics-client'
+import { trackTrainingStart } from '../../features/analytics/training-analytics'
 import { subscribeToContentUpdates } from '../../features/content/content-client'
 import { createLearningActivitySummary } from '../../features/activity/activity-state'
 import { syncLearningActivity } from '../../features/activity/activity-storage'
@@ -67,13 +67,7 @@ export default function Index() {
       item.session,
       { type: 'START' },
     )
-    if (item.progress.status === 'not_started') {
-      trackEvent('training_start', {
-        sessionId: item.session.sessionId,
-        contentVersion: item.session.contentVersion,
-        entry: 'today',
-      })
-    }
+    trackTrainingStart(item.session, nextProgress, 'today')
     writeTrainingProgress(nextProgress)
     setSnapshot(readHomeSnapshot())
     await Taro.navigateTo({

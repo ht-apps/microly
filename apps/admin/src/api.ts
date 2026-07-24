@@ -14,6 +14,8 @@ import {
   AdminWithdrawResponseSchema,
   AdminReviewVariantGenerateResponseSchema,
   AdminOperationsResponseSchema,
+  AdminLearningQualityResponseSchema,
+  ContentQualityIssueUpdateResponseSchema,
   AdminClientErrorUpdateResponseSchema,
   AdminContentGenerationJobListResponseSchema,
   AdminContentGenerationJobResponseSchema,
@@ -34,6 +36,8 @@ import {
   type AdminAiMetrics,
   type AdminReviewVariantGenerate,
   type AdminOperations,
+  type AdminLearningQuality,
+  type ContentQualityIssue,
   type AdminSessionOutline,
 } from '@microly/api-contract'
 
@@ -98,6 +102,17 @@ export const adminApi = {
   verifySession: (token: string) => adminRequest('/v1/admin/session', token, { schema: AdminSessionResponseSchema }),
   getMetrics: (token: string, window: '7d' | '30d') => adminRequest<AdminMetrics>(
     `/v1/admin/metrics?window=${window}`, token, { schema: AdminMetricsResponseSchema },
+  ),
+  getLearningQuality: (token: string, input: { window: '7d' | '30d'; releaseVersion?: number; catalogId?: string; sessionId?: string }) => {
+    const query = new URLSearchParams({ window: input.window })
+    if (input.releaseVersion) query.set('releaseVersion', String(input.releaseVersion))
+    if (input.catalogId) query.set('catalogId', input.catalogId)
+    if (input.sessionId) query.set('sessionId', input.sessionId)
+    return adminRequest<AdminLearningQuality>(`/v1/admin/learning-quality?${query}`, token, { schema: AdminLearningQualityResponseSchema })
+  },
+  updateLearningQualityIssue: (token: string, issueKey: string, status: ContentQualityIssue['status'], internalNote: string | null) => adminRequest<ContentQualityIssue>(
+    `/v1/admin/learning-quality/issues/${issueKey}`, token,
+    { ...json('PATCH', { status, internalNote }), schema: ContentQualityIssueUpdateResponseSchema },
   ),
   getContentIndex: (token: string) => adminRequest<AdminContentIndex>(
     '/v1/admin/content/releases', token, { schema: AdminContentIndexResponseSchema },

@@ -1,15 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AiEvaluation } from '@microly/api-contract'
 import { Button, Text, View } from '@tarojs/components'
-import Taro, { useRouter, useShareAppMessage } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow, useRouter, useShareAppMessage } from '@tarojs/taro'
 
 import {
   getFirstAvailableTraining,
   getTrainingEntry,
   getTrainingSession,
+  currentTrainingContentBundle,
   trainingContent,
 } from '../../data/training-content'
 import { flushAnalyticsOutbox, trackEvent } from '../../features/analytics/analytics-client'
+import {
+  beginActiveTraining,
+  finishActiveTraining,
+  pauseActiveTraining,
+  trackTrainingStart,
+  type TrainingEntry,
+} from '../../features/analytics/training-analytics'
 import { readAccountStatus, upgradeToWechat } from '../../features/account/account-service'
 import { shouldPromptWechatLogin } from '../../features/account/login-prompt'
 import {
@@ -86,6 +94,8 @@ export default function TrainingPage() {
   const [aiWaitUntil, setAiWaitUntil] = useState<number | null>(null)
   const [aiWaitSeconds, setAiWaitSeconds] = useState(0)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const lastCardViewKey = useRef<string | null>(null)
+  const initialResume = useRef(false)
 
   useShareAppMessage(() => (
     session
@@ -105,6 +115,7 @@ export default function TrainingPage() {
     setReviewCardIndex(null)
     Taro.setNavigationBarTitle({ title: session.title })
     const stored = readTrainingProgress(session)
+    initialResume.current = stored.progress.status === 'in_progress' && !router.params.entry
     setRecoveredFromInvalid(stored.recoveredFromInvalid)
 
     const nextProgress = stored.progress.status === 'not_started'
@@ -116,6 +127,7 @@ export default function TrainingPage() {
       : stored.progress
 
     setProgress(nextProgress)
+    trackTrainingStart(session, nextProgress, (router.params.entry as TrainingEntry | undefined) ?? 'direct')
     const storedFavorites = syncFavoriteQueue(trainingContent.sessions)
     setIsPrincipleFavorite(isSessionFavorite(storedFavorites.items, session))
     if (storedFavorites.recoveredFromInvalid) setFavoriteRecoveredFromInvalid(true)
@@ -130,6 +142,37 @@ export default function TrainingPage() {
       setStorageWarning(true)
     }
   }, [session])
+
+  useEffect(() => {
+    if (!session || !progress || progress.status !== 'in_progress' || reviewCardIndex !== null) return
+    const card = session.cards[progress.currentCardIndex]
+    if (!card) return
+    const key = `${progress.attemptId}:${progress.currentCardIndex}`
+    beginActiveTraining(progress.attemptId)
+    if (lastCardViewKey.current !== key) {
+      trackEvent('training_card_view', {
+        attemptId: progress.attemptId,
+        sessionId: session.sessionId,
+        releaseVersion: currentTrainingContentBundle.releaseVersion,
+        contentVersion: session.contentVersion,
+        cardId: card.id,
+        cardType: card.type,
+        cardIndex: progress.currentCardIndex,
+        isResume: initialResume.current,
+      })
+      lastCardViewKey.current = key
+      initialResume.current = false
+      void flushAnalyticsOutbox()
+    }
+    return () => { pauseActiveTraining(progress.attemptId) }
+  }, [progress?.attemptId, progress?.currentCardIndex, progress?.status, reviewCardIndex, session])
+
+  useDidHide(() => {
+    if (progress?.status === 'in_progress') pauseActiveTraining(progress.attemptId)
+  })
+  useDidShow(() => {
+    if (progress?.status === 'in_progress' && reviewCardIndex === null) beginActiveTraining(progress.attemptId)
+  })
 
   useEffect(() => {
     if (process.env.TARO_ENV !== 'weapp') return
@@ -200,7 +243,9 @@ export default function TrainingPage() {
         const option = choice?.options[displayPosition]
         if (option && displayPosition >= 0) {
           trackEvent('option_select', {
+            attemptId: current.attemptId,
             sessionId: session.sessionId,
+            releaseVersion: currentTrainingContentBundle.releaseVersion,
             contentVersion: session.contentVersion,
             optionId: option.id,
             displayPosition,
@@ -223,14 +268,12 @@ export default function TrainingPage() {
         && current.status !== 'completed'
         && nextProgress.status === 'completed'
       ) {
-        const startedAt = nextProgress.startedAt
-        const completedAt = nextProgress.completedAt
         trackEvent('training_complete', {
+          attemptId: nextProgress.attemptId,
           sessionId: session.sessionId,
+          releaseVersion: currentTrainingContentBundle.releaseVersion,
           contentVersion: session.contentVersion,
-          durationMs: startedAt && completedAt
-            ? Math.max(0, Date.parse(completedAt) - Date.parse(startedAt))
-            : 0,
+          durationMs: finishActiveTraining(nextProgress.attemptId),
           practiceUsed: Boolean(nextProgress.practiceEvaluation),
         })
         enqueueTrainingCompletion(nextProgress)

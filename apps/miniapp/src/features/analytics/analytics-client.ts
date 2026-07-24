@@ -6,6 +6,11 @@ import { createUuid } from '../network/identifier'
 
 export const ANALYTICS_OUTBOX_STORAGE_KEY = 'microly:analytics:outbox:v1'
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+const visitId = createUuid()
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 interface AnalyticsEnvelope {
   event: AnalyticsEvent
@@ -56,10 +61,14 @@ export function trackEvent<Name extends AnalyticsName>(
   name: Name,
   properties: AnalyticsProperties<Name>,
 ) {
+  const occurred = new Date()
   const event = {
     eventId: createUuid(),
+    visitId,
     name,
-    occurredAt: new Date().toISOString(),
+    occurredAt: occurred.toISOString(),
+    localDateKey: localDateKey(occurred),
+    timezoneOffsetMinutes: occurred.getTimezoneOffset(),
     properties,
   } as AnalyticsEvent
   writeOutbox([...readOutbox(), {

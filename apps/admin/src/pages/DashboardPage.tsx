@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { App, Card, Col, Empty, Row, Segmented, Space, Statistic, Table, Tag, Typography } from 'antd'
+import { App, Button, Card, Col, Empty, Row, Segmented, Space, Statistic, Table, Tag, Typography } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 
 import { adminApi } from '../api'
 import { useAuth } from '../auth'
@@ -23,6 +23,8 @@ export default function DashboardPage() {
   const [search, setSearch] = useSearchParams()
   const window = search.get('window') === '30d' ? '30d' : '7d'
   const query = useQuery({ queryKey: queryKeys.metrics(window), queryFn: () => adminApi.getMetrics(token, window) })
+  const quality = useQuery({ queryKey: queryKeys.learningQuality({ window }), queryFn: () => adminApi.getLearningQuality(token, { window }) })
+  const navigate = useNavigate()
   const { notification } = App.useApp()
   useEffect(() => {
     if (query.isError) notification.error({ message: '指标加载失败', description: query.error.message, key: 'metrics-error' })
@@ -37,6 +39,12 @@ export default function DashboardPage() {
     {query.isLoading && <PageLoading rows={8} />}
     {query.isError && <PageError onRetry={() => void query.refetch()} />}
     {query.data && <>
+      {quality.data && <Card title="学习效果摘要" extra={<Button onClick={() => navigate(`/learning-quality?window=${window}`)}>查看学习质量</Button>} className="quality-overview-card"><Row gutter={[12, 12]}>
+        <Col xs={12} md={6}><Statistic title="首训完成率" value={quality.data.summary.firstTrainingCompletionRate === null ? '样本不足' : `${(quality.data.summary.firstTrainingCompletionRate * 100).toFixed(1)}%`} /></Col>
+        <Col xs={12} md={6}><Statistic title="D1 留存" value={quality.data.summary.d1RetentionRate === null ? '样本未成熟' : `${(quality.data.summary.d1RetentionRate * 100).toFixed(1)}%`} /></Col>
+        <Col xs={12} md={6}><Statistic title="7 日三练" value={quality.data.summary.sevenDayThreePracticeRate === null ? '样本未成熟' : `${(quality.data.summary.sevenDayThreePracticeRate * 100).toFixed(1)}%`} /></Col>
+        <Col xs={12} md={6}><Statistic title="待优化训练" value={quality.data.summary.openIssueCount} /></Col>
+      </Row></Card>}
       <Row gutter={[14, 14]}>{query.data.funnel.map((stage, index) => <Col xs={12} md={8} xl={4} key={stage.name}>
         <Card className="metric-card"><Statistic title={`${index + 1}. ${funnelLabels[stage.name]}`} value={stage.accounts} /><Typography.Text type="secondary">
           {stage.conversionRate === null ? '窗口内首次用户' : `上一步转化 ${(stage.conversionRate * 100).toFixed(1)}%`}

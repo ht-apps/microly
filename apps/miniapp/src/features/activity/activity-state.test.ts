@@ -42,14 +42,17 @@ describe('learning activity state', () => {
       sessionId: firstSession.sessionId,
       reviewId: `${firstSession.sessionId}:choice`,
       dueAt: localTime(2026, 7, 21),
+      intervalDays: 3,
     }, answeredAt)
     const early = createDueReviewAnsweredEvent({
       sessionId: firstSession.sessionId,
       reviewId: `${firstSession.sessionId}:choice`,
       dueAt: localTime(2026, 7, 23),
+      intervalDays: 3,
     }, answeredAt)
 
     expect(due?.type).toBe('due_review_answered')
+    expect(due).toMatchObject({ scheduledDueAt: localTime(2026, 7, 21), intervalDaysBefore: 3 })
     expect(early).toBeNull()
   })
 
@@ -62,6 +65,7 @@ describe('learning activity state', () => {
       sessionId: firstSession.sessionId,
       reviewId: `${firstSession.sessionId}:choice`,
       dueAt: localTime(2026, 7, 19),
+      intervalDays: 3,
     }
     const firstReview = createDueReviewAnsweredEvent(reviewBase, tuesday)
     const secondReview = createDueReviewAnsweredEvent(

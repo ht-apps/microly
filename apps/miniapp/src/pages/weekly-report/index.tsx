@@ -2,9 +2,12 @@ import { useMemo, useState } from 'react'
 import { Button, ScrollView, Text, View } from '@tarojs/components'
 import Taro, { useDidShow } from '@tarojs/taro'
 
-import { getFirstAvailableTraining, trainingContent } from '../../data/training-content'
+import { getFirstAvailableTraining, getTrainingSession, trainingContent } from '../../data/training-content'
 import { readLearningActivitySnapshot } from '../../features/activity/activity-snapshot'
 import { flushAnalyticsOutbox, trackEvent } from '../../features/analytics/analytics-client'
+import { trackTrainingStart } from '../../features/analytics/training-analytics'
+import { readTrainingProgress, writeTrainingProgress } from '../../features/training/training-storage'
+import { transitionTraining } from '../../features/training/training-state'
 import { canUseAi, listAiEvaluations } from '../../features/ai/ai-client'
 import { readCachedAiEvaluations } from '../../features/ai/ai-history-storage'
 import { buildWeeklyReport, weekStartForOffset } from '../../features/report/weekly-report'
@@ -58,7 +61,15 @@ export default function WeeklyReportPage() {
     trackEvent('weekly_report_action', { weekOffset, action: action.type })
     void flushAnalyticsOutbox()
     if (action.type === 'review') void Taro.navigateTo({ url: '/pages/review/index' })
-    else void Taro.navigateTo({ url: `/pages/training/index?sessionId=${encodeURIComponent(action.sessionId ?? '')}` })
+    else {
+      const session = getTrainingSession(action.sessionId ?? '')
+      if (!session) return
+      const stored = readTrainingProgress(session)
+      const started = transitionTraining(stored.progress, session, { type: 'START' })
+      writeTrainingProgress(started)
+      trackTrainingStart(session, started, 'weekly_report')
+      void Taro.navigateTo({ url: `/pages/training/index?sessionId=${encodeURIComponent(session.sessionId)}&entry=weekly_report` })
+    }
   }
 
   return <View className='weekly-report-page'>

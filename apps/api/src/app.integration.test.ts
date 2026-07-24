@@ -249,8 +249,11 @@ describe('network MVP API', () => {
 
     const analyticsEvent = {
       eventId: '22222222-2222-4222-8222-222222222222',
+      visitId: '32222222-2222-4222-8222-222222222222',
       name: 'app_open',
       occurredAt: '2026-07-23T10:00:00.000Z',
+      localDateKey: '2026-07-23',
+      timezoneOffsetMinutes: -480,
       properties: { source: 'direct' },
     }
     const payload = { events: [analyticsEvent] }
@@ -500,22 +503,49 @@ describe('network MVP API', () => {
     expect(updated.json().data.resolvedAt).toBeTruthy()
 
     const now = Date.now() - 30_000
+    const currentContent = (await app.inject({ method: 'GET', url: '/v1/content/current' })).json().data.bundle
+    const common = (offset: number) => ({ visitId: '60000000-0000-4000-8000-000000000099', occurredAt: new Date(now + offset).toISOString(), localDateKey: new Date(now + offset - (-480 * 60_000)).toISOString().slice(0, 10), timezoneOffsetMinutes: -480 })
+    const attemptId = 'attempt:boundary-decline-001:metrics'
+    const content = { attemptId, sessionId: 'boundary-decline-001', releaseVersion: currentContent.releaseVersion, contentVersion: currentContent.sessions['boundary-decline-001'].contentVersion }
     const events = [
-      { eventId: '60000000-0000-4000-8000-000000000001', name: 'app_open', occurredAt: new Date(now).toISOString(), properties: { source: 'direct' } },
-      { eventId: '60000000-0000-4000-8000-000000000002', name: 'onboarding_view', occurredAt: new Date(now + 1_000).toISOString(), properties: { isFirstVisit: true } },
-      { eventId: '60000000-0000-4000-8000-000000000003', name: 'training_start', occurredAt: new Date(now + 2_000).toISOString(), properties: { sessionId: 'boundary-decline-001', contentVersion: 2, entry: 'onboarding' } },
-      { eventId: '60000000-0000-4000-8000-000000000004', name: 'option_select', occurredAt: new Date(now + 3_000).toISOString(), properties: { sessionId: 'boundary-decline-001', contentVersion: 2, optionId: 'constructive-boundary', displayPosition: 0, rating: 'recommended' } },
-      { eventId: '60000000-0000-4000-8000-000000000005', name: 'training_complete', occurredAt: new Date(now + 4_000).toISOString(), properties: { sessionId: 'boundary-decline-001', contentVersion: 2, durationMs: 2_000, practiceUsed: false } },
-      { eventId: '60000000-0000-4000-8000-000000000006', name: 'wechat_login_success', occurredAt: new Date(now + 5_000).toISOString(), properties: { merged: false } },
+      { eventId: '60000000-0000-4000-8000-000000000001', ...common(0), name: 'app_open', properties: { source: 'direct' } },
+      { eventId: '60000000-0000-4000-8000-000000000002', ...common(1_000), name: 'onboarding_view', properties: { isFirstVisit: true } },
+      { eventId: '60000000-0000-4000-8000-000000000003', ...common(2_000), name: 'training_start', properties: { ...content, entry: 'onboarding' } },
+      { eventId: '60000000-0000-4000-8000-000000000004', ...common(3_000), name: 'training_card_view', properties: { ...content, cardId: 'scenario', cardType: 'scenario', cardIndex: 0, isResume: false } },
+      { eventId: '60000000-0000-4000-8000-000000000005', ...common(4_000), name: 'option_select', properties: { ...content, optionId: 'constructive-boundary', displayPosition: 2, rating: 'recommended' } },
+      { eventId: '60000000-0000-4000-8000-000000000006', ...common(5_000), name: 'training_complete', properties: { ...content, durationMs: 2_000, practiceUsed: false } },
+      { eventId: '60000000-0000-4000-8000-000000000007', ...common(6_000), name: 'wechat_login_success', properties: { merged: false } },
     ]
     const accepted = await app.inject({ method: 'POST', url: '/v1/events/batch', headers: { authorization: userAuthorization }, payload: { events } })
-    expect(accepted.json().data.accepted).toBe(6)
+    expect(accepted.json().data.accepted).toBe(7)
+    const invalidDate = await app.inject({ method: 'POST', url: '/v1/events/batch', headers: { authorization: userAuthorization }, payload: { events: [{ ...events[0], eventId: '60000000-0000-4000-8000-000000000008', localDateKey: '2020-01-01' }] } })
+    expect(invalidDate.statusCode).toBe(422)
+    const invalidCard = await app.inject({ method: 'POST', url: '/v1/events/batch', headers: { authorization: userAuthorization }, payload: { events: [{ ...events[3]!, eventId: '60000000-0000-4000-8000-000000000009', properties: { ...events[3]!.properties, cardId: 'forged-card' } }] } })
+    expect(invalidCard.statusCode).toBe(422)
     const metrics = await app.inject({ method: 'GET', url: '/v1/admin/metrics?window=7d', headers: { authorization: adminAuthorization } })
     expect(metrics.statusCode).toBe(200)
     const funnelCounts = metrics.json().data.funnel.map((stage: { accounts: number }) => stage.accounts)
     expect(funnelCounts[0]).toBeGreaterThanOrEqual(1)
     expect(funnelCounts.slice(1)).toEqual([1, 1, 1, 1, 1])
     expect(JSON.stringify(metrics.json())).not.toContain(guest.json().data.accountId)
+
+    const contentFeedback = await app.inject({
+      method: 'POST', url: '/v1/feedback', headers: { authorization: userAuthorization },
+      payload: { category: 'content_error', detail: '这组训练的一个选项反馈与题目条件不一致。', sessionId: 'boundary-decline-001', contentVersion: content.contentVersion },
+    })
+    expect(contentFeedback.statusCode, contentFeedback.body).toBe(201)
+    const quality = await app.inject({ method: 'GET', url: '/v1/admin/learning-quality?window=30d', headers: { authorization: adminAuthorization } })
+    expect(quality.statusCode, quality.body).toBe(200)
+    expect(quality.json().data.summary.firstOpenAccounts).toBeGreaterThanOrEqual(1)
+    expect(quality.json().data.sessions.some((item: { sessionId: string }) => item.sessionId === 'boundary-decline-001')).toBe(true)
+    const feedbackIssue = quality.json().data.issues.find((item: { signal: string; sessionId: string }) => item.signal === 'content_feedback' && item.sessionId === 'boundary-decline-001')
+    expect(feedbackIssue).toBeTruthy()
+    const resolvedIssue = await app.inject({
+      method: 'PATCH', url: `/v1/admin/learning-quality/issues/${feedbackIssue.issueKey}`,
+      headers: { authorization: adminAuthorization }, payload: { status: 'resolved', internalNote: '已确认反馈，下一版修订。' },
+    })
+    expect(resolvedIssue.statusCode, resolvedIssue.body).toBe(200)
+    expect(resolvedIssue.json().data.status).toBe('resolved')
   })
 
   it('幂等接收隐私安全错误并由后台聚合处理', async () => {
@@ -573,6 +603,16 @@ describe('network MVP API', () => {
       }],
       activities: [],
     }
+    const missingOccurrence = await app.inject({
+      method: 'POST', url: '/v1/sync', headers: { authorization },
+      payload: { ...payload, requestId: '34333333-3333-4333-8333-333333333333', activities: [{
+        eventId: `due_review_answered:${session.sessionId}:${updatedAt}`,
+        type: 'due_review_answered', occurredAt: updatedAt, localDateKey: updatedAt.slice(0, 10),
+        sessionId: session.sessionId, reviewId: `${session.sessionId}:choice`,
+      }] },
+    })
+    expect(missingOccurrence.statusCode).toBe(422)
+    expect(missingOccurrence.json().error.code).toBe('review_occurrence_required')
     const first = await app.inject({ method: 'POST', url: '/v1/sync', headers: { authorization }, payload })
     const repeated = await app.inject({ method: 'POST', url: '/v1/sync', headers: { authorization }, payload })
     expect(first.statusCode).toBe(200)

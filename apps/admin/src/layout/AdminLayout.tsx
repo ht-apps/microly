@@ -1,4 +1,4 @@
-import { AlertOutlined, BarChartOutlined, CommentOutlined, DatabaseOutlined, ExperimentOutlined, FileAddOutlined, LogoutOutlined } from '@ant-design/icons'
+import { AlertOutlined, BarChartOutlined, CommentOutlined, DatabaseOutlined, ExperimentOutlined, FileAddOutlined, FundProjectionScreenOutlined, LogoutOutlined } from '@ant-design/icons'
 import { Button, Layout, Menu } from 'antd'
 import { Outlet, useLocation, useNavigate } from 'react-router'
 
@@ -14,6 +14,7 @@ export function AdminLayout() {
   const selected = location.pathname.startsWith('/content/production') ? '/content/production'
     : location.pathname.startsWith('/content') ? '/content'
       : location.pathname.startsWith('/feedback') ? '/feedback'
+      : location.pathname.startsWith('/learning-quality') ? '/learning-quality'
       : location.pathname.startsWith('/ai') ? '/ai'
         : location.pathname.startsWith('/operations') ? '/operations' : '/dashboard'
   return <Layout className="admin-shell">
@@ -29,6 +30,7 @@ export function AdminLayout() {
         onClick={({ key }) => navigate(key)}
         items={[
           { key: '/dashboard', icon: <BarChartOutlined />, label: '数据概览' },
+          { key: '/learning-quality', icon: <FundProjectionScreenOutlined />, label: '学习质量' },
           { key: '/content', icon: <DatabaseOutlined />, label: '内容管理' },
           { key: '/content/production', icon: <FileAddOutlined />, label: '内容生产' },
           { key: '/feedback', icon: <CommentOutlined />, label: '反馈处理' },

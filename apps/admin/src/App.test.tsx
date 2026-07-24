@@ -65,4 +65,31 @@ describe('admin routes and session', () => {
     expect(await screen.findByRole('heading', { name: '版本与草稿' })).toBeTruthy()
     expect(window.location.hash).toContain('/content')
   })
+
+  it('学习质量页面从 URL 读取窗口并展示样本未成熟状态', async () => {
+    const token = 'admin-token-with-at-least-32-characters'
+    sessionStorage.setItem('microly:admin-token', token)
+    await router.navigate('/learning-quality?window=30d')
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ data: {
+      window: '30d', generatedAt: '2026-07-24T10:00:00.000Z', coverageStartedAt: null,
+      selectedReleaseVersion: 2, currentReleaseVersion: 2,
+      filters: { releases: [{ releaseVersion: 2, publishedAt: '2026-07-24T09:00:00.000Z' }], catalogs: [], sessions: [] },
+      summary: {
+        firstOpenAccounts: 0, firstTrainingStartedAccounts: 0, firstTrainingStartRate: null,
+        firstTrainingCompletedAccounts: 0, firstTrainingCompletionRate: null,
+        d1EligibleAccounts: 0, d1RetainedAccounts: 0, d1RetentionRate: null,
+        sevenDayEligibleAccounts: 0, sevenDayThreePracticeAccounts: 0, sevenDayThreePracticeRate: null,
+        completedAttempts: 0, activePracticeRate: null, medianDurationMs: null,
+        dueReviewOccurrences: 0, dueReviewCompleted: 0, dueReviewCompletionRate: null,
+        welAccounts: 0, openIssueCount: 0,
+      },
+      retentionTrend: [], sessions: [], issues: [],
+    } }))))
+
+    renderApp()
+    expect(await screen.findByRole('heading', { name: '学习质量' })).toBeTruthy()
+    expect(screen.getByText('近 30 天')).toBeTruthy()
+    expect(await screen.findByText('当前筛选范围没有新版训练数据')).toBeTruthy()
+    expect(window.location.hash).toContain('window=30d')
+  })
 })

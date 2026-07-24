@@ -11,6 +11,7 @@ import type {
 import type { TrainingContentBundle } from '@microly/content-schema'
 import {
   boolean,
+  date,
   doublePrecision,
   integer,
   jsonb,
@@ -106,10 +107,21 @@ export const trainingCompletions = pgTable('training_completions', {
 export const analyticsEvents = pgTable('analytics_events', {
   eventId: uuid('event_id').primaryKey(),
   accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  visitId: uuid('visit_id'),
   name: varchar('name', { length: 60 }).$type<AnalyticsEvent['name']>().notNull(),
   occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull(),
+  localDateKey: date('local_date_key'),
+  timezoneOffsetMinutes: integer('timezone_offset_minutes'),
   properties: jsonb('properties').$type<AnalyticsEvent['properties']>().notNull(),
   receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const analyticsAccountFacts = pgTable('analytics_account_facts', {
+  accountId: uuid('account_id').primaryKey().references(() => accounts.id, { onDelete: 'cascade' }),
+  firstOpenedAt: timestamp('first_opened_at', { withTimezone: true }).notNull(),
+  firstOpenedLocalDate: date('first_opened_local_date').notNull(),
+  timezoneOffsetMinutes: integer('timezone_offset_minutes').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
 export const userPreferences = pgTable('user_preferences', {
@@ -134,6 +146,32 @@ export const reviewStates = pgTable('review_states', {
   value: jsonb('value').$type<ReviewSyncRecord>().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
 }, (table) => [uniqueIndex('review_states_account_item_idx').on(table.accountId, table.reviewId)])
+
+export const reviewScheduleOccurrences = pgTable('review_schedule_occurrences', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  accountId: uuid('account_id').notNull().references(() => accounts.id, { onDelete: 'cascade' }),
+  reviewId: text('review_id').notNull(),
+  sessionId: varchar('session_id', { length: 100 }).notNull(),
+  contentVersion: integer('content_version').notNull(),
+  scheduledDueAt: timestamp('scheduled_due_at', { withTimezone: true }).notNull(),
+  intervalDays: integer('interval_days').notNull(),
+  answeredAt: timestamp('answered_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex('review_schedule_occurrences_idx').on(table.accountId, table.reviewId, table.scheduledDueAt)])
+
+export const contentQualityIssueStates = pgTable('content_quality_issue_states', {
+  issueKey: varchar('issue_key', { length: 64 }).primaryKey(),
+  releaseVersion: integer('release_version').notNull(),
+  sessionId: varchar('session_id', { length: 100 }).notNull(),
+  signal: varchar('signal', { length: 40 }).notNull(),
+  status: varchar('status', { length: 20 }).$type<'open' | 'in_progress' | 'resolved' | 'dismissed'>().notNull().default('open'),
+  internalNote: text('internal_note'),
+  metricSnapshot: jsonb('metric_snapshot').$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+})
 
 export const trainingProgressStates = pgTable('training_progress_states', {
   id: uuid('id').primaryKey().defaultRandom(),

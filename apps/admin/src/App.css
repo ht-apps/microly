@@ -33,6 +33,7 @@
 
 .metric-card { height: 100%; box-shadow: 0 8px 25px #28233e0a; }
 .metric-card .ant-statistic { margin-bottom: 8px; }
+.quality-overview-card { margin-bottom: 16px; }
 .dashboard-row { margin: 16px 0; }
 .dashboard-row > .ant-col { display: flex; }
 .dashboard-row .ant-card { width: 100%; }
@@ -52,6 +53,29 @@
 .api-runtime-card .ant-space { width: 100%; justify-content: space-around; }
 .operations-rankings, .operations-rankings > .ant-space-item, .operations-rankings .ant-card { width: 100%; }
 .operations-issues-table .ant-table-row { cursor: pointer; }
+.quality-filters { margin-bottom: 16px; }
+.quality-filters .ant-select { min-width: 180px; }
+.quality-summary { margin-bottom: 16px; }
+.quality-side-summary, .quality-side-summary > .ant-space-item, .quality-drawer, .quality-drawer > .ant-space-item { width: 100%; }
+.quality-issues-card { margin-top: 16px; }
+.learning-quality-page .ant-table-row { cursor: pointer; }
+.quality-table-link { height: auto; padding: 0; text-align: left; }
+.quality-performance-card { overflow: hidden; }
+.quality-performance-card > .ant-card-body { padding: 10px 20px 14px; }
+.quality-performance-table .ant-table { font-size: 13px; }
+.quality-performance-table .ant-table-thead > tr > th { padding-block: 13px; color: #65697a; background: #f7f7fb; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.quality-performance-table .ant-table-tbody > tr > td { height: 72px; padding-block: 12px; vertical-align: middle; }
+.quality-performance-table .ant-table-tbody > tr:hover > td { background: #f8f7ff !important; }
+.quality-performance-table .ant-table-cell-fix-left { background: #fff; }
+.quality-performance-table .ant-pagination { margin: 16px 0 4px; }
+.quality-session-cell { display: grid; min-width: 0; gap: 3px; }
+.quality-session-cell strong, .quality-session-cell .ant-typography { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quality-session-cell strong { color: #272a3d; font-size: 14px; }
+.quality-session-cell .ant-typography { font-size: 12px; }
+.quality-empty-value { color: #b7b9c4; }
+.quality-sample-cell { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.quality-sample-cell .ant-tag { margin: 0; }
+.quality-sample-cell small { color: #9a9dab; font-size: 11px; }
 
 .content-workbench { min-height: 720px; background: transparent; border: 1px solid #e5e6ed; border-radius: 20px; box-shadow: 0 8px 28px #28233e0b; overflow: hidden; }
 .content-page.release-page { display: flex; height: calc(100dvh - 100px); min-height: 0; flex-direction: column; overflow: hidden; }
