@@ -139,6 +139,50 @@ afterAll(async () => {
 describe('network MVP API', () => {
   const adminAuthorization = 'Bearer admin-token-with-at-least-32-characters'
 
+  it('提供生产探针、运行开关、版本门槛和发布保障数据', async () => {
+    const live = await app.inject({ method: 'GET', url: '/health/live' })
+    const ready = await app.inject({ method: 'GET', url: '/health/ready' })
+    expect(live.statusCode).toBe(200)
+    expect(ready.statusCode, ready.body).toBe(200)
+    expect(ready.json().data.migrations).toBe('ok')
+    const current = await app.inject({ method: 'GET', url: '/v1/admin/runtime-config', headers: { authorization: adminAuthorization } })
+    expect(current.statusCode).toBe(200)
+    const paused = await app.inject({
+      method: 'PUT', url: '/v1/admin/runtime-config', headers: { authorization: adminAuthorization },
+      payload: { revision: current.json().data.revision, minimumSupportedVersion: '2.0.0', maintenance: { active: true, message: '集成测试维护中' }, features: { wechatLogin: true, accountSync: false, aiEvaluation: true, feedback: true }, reason: '验证维护降级' },
+    })
+    expect(paused.statusCode).toBe(200)
+    const blocked = await app.inject({ method: 'POST', url: '/v1/auth/guest', headers: { 'x-microly-app-version': '1.0.0' }, payload: { installationId: '99999999-9999-4999-8999-999999999999' } })
+    expect(blocked.statusCode).toBe(426)
+    const content = await app.inject({ method: 'GET', url: '/v1/content/current' })
+    expect(content.statusCode).toBe(200)
+    const restored = await app.inject({
+      method: 'PUT', url: '/v1/admin/runtime-config', headers: { authorization: adminAuthorization },
+      payload: { revision: paused.json().data.revision, minimumSupportedVersion: '1.0.0', maintenance: { active: false, message: null }, features: { wechatLogin: true, accountSync: true, aiEvaluation: true, feedback: true }, reason: '结束维护测试' },
+    })
+    expect(restored.statusCode).toBe(200)
+    const deployments = await app.inject({ method: 'GET', url: '/v1/admin/deployments', headers: { authorization: adminAuthorization } })
+    const backups = await app.inject({ method: 'GET', url: '/v1/admin/backups', headers: { authorization: adminAuthorization } })
+    expect(deployments.json().data.items).toEqual([])
+    expect(backups.json().data.items).toEqual([])
+  })
+
+  it('生产环境拒绝缺少版本头的联网写入', async () => {
+    const productionApp = createApp({ databaseUrl, runtime: { environment: 'production', appVersion: '1.0.0' } })
+    await productionApp.ready()
+    const missing = await productionApp.inject({
+      method: 'POST', url: '/v1/auth/guest', payload: { installationId: '88888888-8888-4888-8888-888888888888' },
+    })
+    expect(missing.statusCode).toBe(426)
+    expect(missing.json().error.code).toBe('app_version_required')
+    const current = await productionApp.inject({
+      method: 'POST', url: '/v1/auth/guest', headers: { 'x-microly-app-version': '1.0.0' },
+      payload: { installationId: '88888888-8888-4888-8888-888888888888' },
+    })
+    expect(current.statusCode).toBe(200)
+    await productionApp.close()
+  })
+
   it('将空 JSON 请求体报告为安全的 400 错误', async () => {
     const response = await app.inject({
       method: 'POST',

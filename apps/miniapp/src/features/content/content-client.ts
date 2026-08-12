@@ -9,6 +9,7 @@ import Taro from '@tarojs/taro'
 
 import { getApiBaseUrl, isNetworkEnabled } from '../network/network-config'
 import { captureClientError } from '../diagnostics/client-errors'
+import { appVersionHeader } from '../network/runtime-config'
 
 export const CONTENT_CACHE_STORAGE_KEY = 'microly:content-cache:v1'
 export const CONTENT_UPDATED_EVENT = 'microly:content-updated'
@@ -58,7 +59,7 @@ export async function refreshTrainingContent() {
     const response = await Taro.request({
       url: `${getApiBaseUrl()}/v1/content/current`,
       method: 'GET',
-      header: cached ? { 'If-None-Match': `"${cached.checksum}"` } : {},
+      header: { ...appVersionHeader(), ...(cached ? { 'If-None-Match': `"${cached.checksum}"` } : {}) },
       timeout: 8000,
     })
     if (response.statusCode === 304) return false

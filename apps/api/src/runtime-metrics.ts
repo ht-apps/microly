@@ -32,4 +32,6 @@ export class RuntimeMetrics {
       latencyP95: percentile(0.95),
     }
   }
+
+  clear() { this.samples = [] }
 }

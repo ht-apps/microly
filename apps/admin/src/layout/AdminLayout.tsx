@@ -35,7 +35,7 @@ export function AdminLayout() {
           { key: '/content/production', icon: <FileAddOutlined />, label: '内容生产' },
           { key: '/feedback', icon: <CommentOutlined />, label: '反馈处理' },
           { key: '/ai', icon: <ExperimentOutlined />, label: 'AI 点评' },
-          { key: '/operations', icon: <AlertOutlined />, label: '运行保障' },
+          { key: '/operations', icon: <AlertOutlined />, label: '封测发布' },
         ]}
       />
       <Button className="sidebar-logout" type="text" icon={<LogoutOutlined />} onClick={() => { logout(); navigate('/login', { replace: true }) }}>退出后台</Button>

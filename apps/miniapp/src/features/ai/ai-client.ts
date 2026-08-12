@@ -13,10 +13,12 @@ import type { TrainingProgress } from '../training/training-state'
 import { resolveAiAccessState } from './ai-access'
 import { readCachedAiEvaluations, writeCachedAiEvaluations } from './ai-history-storage'
 import { captureClientError } from '../diagnostics/client-errors'
+import { readRuntimeConfig, requiresAppUpdate } from '../network/runtime-config'
 
 export function readAiAccessState() {
+  const runtime = readRuntimeConfig()
   return resolveAiAccessState({
-    networkEnabled: isNetworkEnabled(),
+    networkEnabled: isNetworkEnabled() && runtime.features.aiEvaluation && !runtime.maintenance.active && !requiresAppUpdate(runtime),
     authType: readStoredAuth()?.authType ?? 'guest',
   })
 }

@@ -4,6 +4,7 @@ import Taro from '@tarojs/taro'
 import { FeedbackResponseSchema } from '@microly/api-contract'
 
 import { authorizedRequest } from '../../features/network/guest-auth'
+import { canUseNetworkFeature } from '../../features/network/runtime-config'
 import { flushAnalyticsOutbox, trackEvent } from '../../features/analytics/analytics-client'
 import './index.scss'
 
@@ -18,6 +19,10 @@ export default function FeedbackPage() {
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
   const submit = async () => {
+    if (!canUseNetworkFeature('feedback')) {
+      Taro.showToast({ title: '反馈服务暂不可用，请稍后再试', icon: 'none' })
+      return
+    }
     const content = detail.trim()
     if (content.length < 10) return Taro.showToast({ title: '请至少输入 10 个字', icon: 'none' })
     setBusy(true)

@@ -2,7 +2,7 @@ import { createApp } from './app.js'
 import { readConfig } from './config.js'
 
 const config = readConfig()
-const app = createApp({ databaseUrl: config.databaseUrl, logger: true, wechat: config.wechat, admin: config.admin, ai: config.ai })
+const app = createApp({ databaseUrl: config.databaseUrl, logger: true, wechat: config.wechat, admin: config.admin, ai: config.ai, runtime: config.runtime, alerts: config.alerts })
 let isClosing = false
 
 async function close(signal: NodeJS.Signals) {

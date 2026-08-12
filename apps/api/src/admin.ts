@@ -9,6 +9,7 @@ import {
   AdminFeedbackStatusSchema,
   AdminFeedbackUpdateRequestSchema,
   AdminClientErrorUpdateRequestSchema,
+  AdminRuntimeConfigUpdateRequestSchema,
   ContentQualityIssueUpdateRequestSchema,
   AdminGenerationJobInsertRequestSchema,
   AdminOutlineGenerateRequestSchema,
@@ -26,6 +27,7 @@ import type { DatabaseContext } from './db/client.js'
 import { checksumBundle } from './db/seed.js'
 import { activeConfig, AiProviderValidationError, type AiProvider } from './ai.js'
 import type { RuntimeMetrics } from './runtime-metrics.js'
+import type { RuntimeConfigStore } from './runtime-config.js'
 import { buildLearningQuality } from './learning-quality.js'
 
 const feedbackCategories = ['content_error', 'product_suggestion', 'inappropriate_content'] as const
@@ -514,7 +516,13 @@ async function publishDraft(database: DatabaseContext, draftId: string, revision
   }
 }
 
-export function registerAdminRoutes(app: FastifyInstance, database: DatabaseContext, admin?: AdminOptions, ai?: { provider?: AiProvider; configured: boolean; runtimeMetrics?: RuntimeMetrics }) {
+export function registerAdminRoutes(app: FastifyInstance, database: DatabaseContext, admin?: AdminOptions, ai?: {
+  provider?: AiProvider
+  configured: boolean
+  runtimeMetrics?: RuntimeMetrics
+  runtimeConfig?: RuntimeConfigStore
+  runtime?: { environment: 'development' | 'test' | 'production'; appVersion: string }
+}) {
   const generationControllers = new Map<string, AbortController>()
   const generationQueue: Array<{ jobId: string; run: (signal: AbortSignal) => Promise<void> }> = []
   let activeGenerationJobs = 0
@@ -557,6 +565,55 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
   app.get('/v1/admin/session', async (request, reply) => {
     if (!await authorizeAdmin(request, reply, admin)) return
     return reply.send({ data: { authenticated: true } })
+  })
+
+  app.get('/v1/admin/runtime-config', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    if (!ai?.runtimeConfig) return sendError(reply, 503, 'runtime_config_unavailable', '运行配置暂时不可用。')
+    return reply.send({ data: await ai.runtimeConfig.read(true) })
+  })
+
+  app.put('/v1/admin/runtime-config', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    if (!ai?.runtimeConfig) return sendError(reply, 503, 'runtime_config_unavailable', '运行配置暂时不可用。')
+    const input = AdminRuntimeConfigUpdateRequestSchema.parse(request.body)
+    const updated = await database.pool.query(`UPDATE runtime_settings SET revision=revision+1,
+      minimum_supported_version=$2, maintenance_active=$3, maintenance_message=$4,
+      features=$5::jsonb, updated_at=now() WHERE singleton=true AND revision=$1 RETURNING revision`, [
+      input.revision, input.minimumSupportedVersion, input.maintenance.active,
+      input.maintenance.message, JSON.stringify(input.features),
+    ])
+    if (!updated.rowCount) return sendError(reply, 409, 'runtime_config_conflict', '运行配置已被其他操作更新，请刷新后重试。')
+    await database.pool.query(`INSERT INTO admin_audit_logs (action,target_type,target_id,reason,metadata)
+      VALUES ('runtime.config.update','runtime_config','singleton',$1,$2::jsonb)`, [input.reason, JSON.stringify({
+      revision: updated.rows[0].revision, minimumSupportedVersion: input.minimumSupportedVersion,
+      maintenanceActive: input.maintenance.active, features: input.features,
+    })])
+    ai.runtimeConfig.invalidate()
+    return reply.send({ data: await ai.runtimeConfig.read(true) })
+  })
+
+  app.get('/v1/admin/deployments', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const rows = await database.pool.query(`SELECT id,app_version,git_commit,image_tag,migration_version,
+      content_version,status,reason,created_at,completed_at FROM deployment_releases ORDER BY created_at DESC LIMIT 100`)
+    return reply.send({ data: { items: rows.rows.map((row) => ({
+      id: row.id, appVersion: row.app_version, gitCommit: row.git_commit, imageTag: row.image_tag,
+      migrationVersion: row.migration_version, contentVersion: row.content_version, status: row.status,
+      reason: row.reason, createdAt: row.created_at.toISOString(), completedAt: row.completed_at?.toISOString() ?? null,
+    })) } })
+  })
+
+  app.get('/v1/admin/backups', async (request, reply) => {
+    if (!await authorizeAdmin(request, reply, admin)) return
+    const rows = await database.pool.query(`SELECT id,filename,kind,status,size_bytes,checksum,created_at,
+      completed_at,restore_verified_at FROM database_backups ORDER BY created_at DESC LIMIT 100`)
+    return reply.send({ data: { items: rows.rows.map((row) => ({
+      id: row.id, filename: row.filename, kind: row.kind, status: row.status,
+      sizeBytes: row.size_bytes === null ? null : Number(row.size_bytes), checksum: row.checksum,
+      createdAt: row.created_at.toISOString(), completedAt: row.completed_at?.toISOString() ?? null,
+      restoreVerifiedAt: row.restore_verified_at?.toISOString() ?? null,
+    })) } })
   })
 
   app.get('/v1/admin/content/releases', async (request, reply) => {
@@ -1225,7 +1282,7 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
     const bucket = window === '1h'
       ? `date_trunc('minute', received_at) - (extract(minute FROM received_at)::int % 10) * interval '1 minute'`
       : window === '24h' ? `date_trunc('hour', received_at)` : `date_trunc('day', received_at)`
-    const [summary, daily, pages, versions, issues, content, model] = await Promise.all([
+    const [summary, daily, pages, versions, issues, content, model, alerts, pendingFeedback] = await Promise.all([
       database.pool.query(`SELECT count(*)::int total, count(DISTINCT account_id)::int affected_accounts,
         count(DISTINCT fingerprint) FILTER (WHERE status <> 'resolved')::int unresolved
         FROM client_error_reports WHERE received_at >= now() - $1::interval`, [interval]),
@@ -1246,12 +1303,15 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
         FROM client_error_reports WHERE received_at >= now() - $1::interval
         GROUP BY fingerprint, category, severity, page, error_code
         ORDER BY max(occurred_at) DESC LIMIT 100`, [interval]),
-      database.pool.query('SELECT release_version FROM content_releases ORDER BY release_version DESC LIMIT 1'),
+      database.pool.query('SELECT release_version,bundle FROM content_releases ORDER BY release_version DESC LIMIT 1'),
       database.pool.query('SELECT model_id FROM ai_model_configs WHERE active=true LIMIT 1'),
+      database.pool.query('SELECT alert_key,level,last_sent_at,updated_at FROM runtime_alert_states WHERE active=true ORDER BY updated_at DESC LIMIT 50'),
+      database.pool.query("SELECT count(*)::int count FROM feedback WHERE status IN ('new','in_progress')"),
     ])
     const total = Number(summary.rows[0]?.total ?? 0)
     const fatalCount = daily.rows.reduce((sum, row) => sum + Number(row.fatals), 0)
     const activeModelId = model.rows[0]?.model_id ?? null
+    const contentAvailable = Boolean(content.rows[0] && TrainingContentBundleSchema.safeParse(content.rows[0].bundle).success)
     const apiMetrics = ai?.runtimeMetrics?.snapshot(window === '1h' ? 60 * 60 * 1000 : window === '24h' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000)
       ?? { requests: 0, errorRate: 0, latencyP50: null, latencyP95: null }
     const level = fatalCount > 0 || total >= 100 || apiMetrics.errorRate >= 0.1
@@ -1262,13 +1322,14 @@ export function registerAdminRoutes(app: FastifyInstance, database: DatabaseCont
       generatedAt: new Date().toISOString(),
       services: {
         process: 'ok', database: 'ok', ai: ai?.configured ? (activeModelId ? 'ok' : 'unavailable') : 'disabled',
-        content: content.rows[0] ? 'ok' : 'unavailable', currentContentVersion: content.rows[0]?.release_version ?? null, activeModelId,
+        content: contentAvailable ? 'ok' : 'unavailable', currentContentVersion: contentAvailable ? content.rows[0]?.release_version ?? null : null, activeModelId,
       },
-      summary: { total, unresolved: Number(summary.rows[0]?.unresolved ?? 0), affectedAccounts: Number(summary.rows[0]?.affected_accounts ?? 0), level },
+      summary: { total, unresolved: Number(summary.rows[0]?.unresolved ?? 0), affectedAccounts: Number(summary.rows[0]?.affected_accounts ?? 0), pendingFeedback: Number(pendingFeedback.rows[0]?.count ?? 0), level },
       api: apiMetrics,
       daily: daily.rows.map((row) => ({ time: row.time, warnings: Number(row.warnings), errors: Number(row.errors), fatals: Number(row.fatals) })),
       pages: pages.rows.map((row) => ({ page: row.page, count: Number(row.count) })),
       versions: versions.rows.map((row) => ({ appVersion: row.app_version, count: Number(row.count) })),
+      alerts: alerts.rows.map((row) => ({ key: row.alert_key, level: row.level, lastSentAt: row.last_sent_at?.toISOString() ?? null, updatedAt: row.updated_at.toISOString() })),
       issues: issues.rows.map((row) => ({
         fingerprint: row.fingerprint, category: row.category, severity: row.severity, page: row.page,
         errorCode: row.error_code, count: Number(row.count), affectedAccounts: Number(row.affected_accounts),

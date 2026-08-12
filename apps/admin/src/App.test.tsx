@@ -92,4 +92,30 @@ describe('admin routes and session', () => {
     expect(await screen.findByText('当前筛选范围没有新版训练数据')).toBeTruthy()
     expect(window.location.hash).toContain('window=30d')
   })
+
+  it('封测发布页汇总运行配置、部署和备份状态', async () => {
+    sessionStorage.setItem('microly:admin-token', 'admin-token-with-at-least-32-characters')
+    await router.navigate('/operations')
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/runtime-config')) return new Response(JSON.stringify({ data: {
+        revision: 1, environment: 'production', apiVersion: '1.0.0', minimumSupportedVersion: '1.0.0',
+        maintenance: { active: false, message: null }, features: { wechatLogin: true, accountSync: true, aiEvaluation: true, feedback: true },
+        serverTime: '2026-07-24T10:00:00.000Z',
+      } }))
+      if (url.includes('/deployments')) return new Response(JSON.stringify({ data: { items: [] } }))
+      if (url.includes('/backups')) return new Response(JSON.stringify({ data: { items: [] } }))
+      return new Response(JSON.stringify({ data: {
+        window: '24h', generatedAt: '2026-07-24T10:00:00.000Z',
+        services: { process: 'ok', database: 'ok', ai: 'ok', content: 'ok', currentContentVersion: 2, activeModelId: 'deepseek-v4-flash' },
+        summary: { total: 0, unresolved: 0, affectedAccounts: 0, pendingFeedback: 0, level: 'normal' },
+        api: { requests: 10, errorRate: 0, latencyP50: 12, latencyP95: 30 }, daily: [], pages: [], versions: [], alerts: [], issues: [],
+      } }))
+    }))
+    renderApp()
+    expect(await screen.findByRole('heading', { name: '封测发布' })).toBeTruthy()
+    expect(await screen.findByText('运行开关')).toBeTruthy()
+    expect(await screen.findByText('最近发布', {}, { timeout: 5_000 })).toBeTruthy()
+    expect(await screen.findByText('尚无部署记录', {}, { timeout: 5_000 })).toBeTruthy()
+  })
 })

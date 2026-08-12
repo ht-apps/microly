@@ -8,6 +8,7 @@ import Taro from '@tarojs/taro'
 
 import { createSecureUuid } from './identifier'
 import { getApiBaseUrl, isNetworkEnabled } from './network-config'
+import { appVersionHeader, canUseNetworkFeature } from './runtime-config'
 
 export const INSTALLATION_ID_STORAGE_KEY = 'microly:network:installation:v1'
 export const GUEST_AUTH_STORAGE_KEY = 'microly:network:guest-auth:v1'
@@ -43,7 +44,7 @@ export async function getGuestAuth(forceRefresh = false) {
   }
   const response = await Taro.request({
     url: `${getApiBaseUrl()}/v1/auth/guest`, method: 'POST',
-    data: { installationId: await readInstallationId() }, timeout: 8000,
+    data: { installationId: await readInstallationId() }, header: appVersionHeader(), timeout: 8000,
   })
   if (response.statusCode < 200 || response.statusCode >= 300) return null
   const parsed = GuestAuthResponseSchema.safeParse(response.data)
@@ -59,7 +60,7 @@ export async function getGuestAuth(forceRefresh = false) {
 }
 
 export async function loginWithWechat() {
-  if (!isNetworkEnabled()) return null
+  if (!isNetworkEnabled() || !canUseNetworkFeature('wechatLogin')) return null
   const login = await Taro.login()
   if (!login.code) return null
   const response = await authorizedRequest<unknown>({ path: '/v1/auth/wechat', method: 'POST', data: { code: login.code } })
@@ -80,7 +81,7 @@ export async function authorizedRequest<T>(options: {
     if (!auth) return null
     return Taro.request<T>({
       url: `${getApiBaseUrl()}${options.path}`, method: options.method,
-      data: options.data, header: { Authorization: `Bearer ${auth.token}` }, timeout: 8000,
+      data: options.data, header: { ...appVersionHeader(), Authorization: `Bearer ${auth.token}` }, timeout: 8000,
     })
   }
   let response = await execute(false)

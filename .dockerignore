@@ -1,0 +1,13 @@
+.git
+.env*
+!.env.production.example
+node_modules
+**/node_modules
+**/dist
+**/.turbo
+.pnpm-store
+.swc
+backups-production
+deploy_versions
+coverage
+*.log

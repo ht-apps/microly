@@ -10,6 +10,7 @@ import Taro from '@tarojs/taro'
 import { authorizedRequest } from '../network/guest-auth'
 import { createInitialProgress, type TrainingProgress } from '../training/training-state'
 import { readTrainingProgress, writeTrainingProgress } from '../training/training-storage'
+import { canUseNetworkFeature } from '../network/runtime-config'
 
 export const COMPLETION_OUTBOX_STORAGE_KEY = 'microly:sync:completion-outbox:v1'
 
@@ -74,6 +75,7 @@ export function enqueueTrainingCompletion(progress: TrainingProgress) {
 }
 
 export async function flushCompletionOutbox() {
+  if (!canUseNetworkFeature('accountSync')) return 0
   const pending = readOutbox()
   if (pending.length === 0) return 0
   const remaining: TrainingCompletion[] = []

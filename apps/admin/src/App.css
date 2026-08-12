@@ -50,6 +50,7 @@
 .operations-drawer { width: 100%; }
 .operations-drawer > .ant-space-item, .operations-status-select { width: 100%; }
 .api-runtime-card { margin-bottom: 16px; }
+.release-readiness-alert { margin-bottom: 16px; border-radius: 14px; }
 .api-runtime-card .ant-space { width: 100%; justify-content: space-around; }
 .operations-rankings, .operations-rankings > .ant-space-item, .operations-rankings .ant-card { width: 100%; }
 .operations-issues-table .ant-table-row { cursor: pointer; }

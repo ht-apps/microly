@@ -23,6 +23,8 @@ import { ZodError } from 'zod'
 import { registerAdminRoutes } from './admin.js'
 import { createDeepseekProvider, registerAiRoutes, type AiProvider } from './ai.js'
 import { RuntimeMetrics } from './runtime-metrics.js'
+import { RuntimeAlertMonitor } from './runtime-alerts.js'
+import { compareVersions, RuntimeConfigStore } from './runtime-config.js'
 import { createDatabase, type DatabaseContext } from './db/client.js'
 import {
   accounts,
@@ -238,14 +240,22 @@ export interface CreateAppOptions {
   admin?: { token: string; origins: string[] }
   ai?: { apiKey: string; inputHashSecret: string; baseUrl?: string }
   aiProvider?: AiProvider
+  runtime?: { environment: 'development' | 'test' | 'production'; appVersion: string; apiPublicOrigin?: string; adminPublicOrigin?: string }
+  alerts?: { webhookUrl: string; cooldownMinutes: number; fetcher?: typeof fetch }
 }
 
 export function createApp(options: CreateAppOptions) {
   const database = createDatabase(options.databaseUrl)
   const app = Fastify({ logger: options.logger ?? false, bodyLimit: 256 * 1024 })
   const runtimeMetrics = new RuntimeMetrics()
+  const runtime = options.runtime ?? { environment: 'development' as const, appVersion: '1.0.0' }
+  const runtimeConfig = new RuntimeConfigStore(database, runtime.environment, runtime.appVersion)
   app.addHook('onRequest', async (request) => { runtimeMetrics.start(request) })
   app.addHook('onResponse', async (request, reply) => { runtimeMetrics.finish(request, reply) })
+  app.addHook('onSend', async (_request, reply, payload) => {
+    reply.header('X-Microly-Api-Version', runtime.appVersion)
+    return payload
+  })
   const exchangeWechatCode = options.exchangeWechatCode ?? (async (code: string) => {
     if (!options.wechat) throw new Error('Wechat login is not configured')
     const query = new URLSearchParams({ appid: options.wechat.appId, secret: options.wechat.appSecret, js_code: code, grant_type: 'authorization_code' })
@@ -255,7 +265,13 @@ export function createApp(options: CreateAppOptions) {
     return { openid: value.openid }
   })
 
-  app.addHook('onClose', async () => database.pool.end())
+  const alertMonitor = options.alerts ? new RuntimeAlertMonitor({
+    database, metrics: runtimeMetrics, webhookUrl: options.alerts.webhookUrl,
+    cooldownMinutes: options.alerts.cooldownMinutes, environment: runtime.environment,
+    appVersion: runtime.appVersion, logger: app.log, fetcher: options.alerts.fetcher,
+  }) : undefined
+  app.addHook('onReady', async () => { alertMonitor?.start() })
+  app.addHook('onClose', async () => { alertMonitor?.stop(); await database.pool.end() })
   app.setErrorHandler((cause, _request, reply) => {
     if (cause instanceof ZodError) return error(reply, 400, 'invalid_request', '请求内容不符合接口约定。')
     if (typeof cause === 'object' && cause !== null && 'statusCode' in cause && cause.statusCode === 400) {
@@ -265,13 +281,53 @@ export function createApp(options: CreateAppOptions) {
     return error(reply, 500, 'internal_error', '服务暂时不可用。')
   })
 
-  app.get('/health', async (_request, reply) => {
+  app.get('/health/live', async (_request, reply) => reply.send({ data: { process: 'ok', version: runtime.appVersion } }))
+
+  const readiness = async () => {
     try {
-      await database.pool.query('SELECT 1')
-      return reply.send({ data: { process: 'ok', database: 'ok' } })
+      const [databaseStatus, content, migration] = await Promise.all([
+        database.pool.query('SELECT 1'),
+        database.pool.query('SELECT release_version,bundle FROM content_releases ORDER BY release_version DESC LIMIT 1'),
+        database.pool.query('SELECT filename FROM schema_migrations ORDER BY filename DESC LIMIT 1'),
+      ])
+      void databaseStatus
+      const contentAvailable = Boolean(content.rows[0] && TrainingContentBundleSchema.safeParse(content.rows[0].bundle).success)
+      const data = {
+        process: 'ok' as const, database: 'ok' as const,
+        content: contentAvailable ? 'ok' as const : 'unavailable' as const,
+        migrations: migration.rows[0]?.filename === '0007_beta_release.sql' ? 'ok' as const : 'pending' as const,
+        version: runtime.appVersion,
+      }
+      return { status: data.content === 'ok' && data.migrations === 'ok' ? 200 : 503, data }
     } catch {
-      return reply.status(503).send({ data: { process: 'ok', database: 'unavailable' } })
+      return { status: 503, data: { process: 'ok' as const, database: 'unavailable' as const, content: 'unavailable' as const, migrations: 'unknown' as const, version: runtime.appVersion } }
     }
+  }
+  app.get('/health', async (_request, reply) => { const result = await readiness(); return reply.status(result.status).send({ data: result.data }) })
+  app.get('/health/ready', async (_request, reply) => { const result = await readiness(); return reply.status(result.status).send({ data: result.data }) })
+
+  app.get('/v1/runtime-config', async (_request, reply) => {
+    const value = await runtimeConfig.read()
+    return reply.header('Cache-Control', 'public, max-age=30').send({ data: value })
+  })
+
+  app.addHook('preHandler', async (request, reply) => {
+    const path = request.url.split('?')[0] ?? request.url
+    if (path.startsWith('/health') || path.startsWith('/v1/admin/') || path === '/v1/runtime-config' || request.method === 'OPTIONS') return
+    const settings = await runtimeConfig.read()
+    const appVersion = request.headers['x-microly-app-version']
+    const safe = request.method === 'GET' || request.method === 'HEAD' || path === '/v1/auth/logout' || (path === '/v1/account' && request.method === 'DELETE')
+    if (!safe && runtime.environment === 'production' && (typeof appVersion !== 'string' || !/^\d+\.\d+\.\d+/u.test(appVersion))) {
+      return error(reply, 426, 'app_version_required', '当前客户端需要更新后才能继续联网操作。')
+    }
+    if (!safe && typeof appVersion === 'string' && /^\d+\.\d+\.\d+/u.test(appVersion) && compareVersions(appVersion, settings.minimumSupportedVersion) < 0) {
+      return error(reply, 426, 'app_update_required', '当前版本需要更新后才能继续联网操作。')
+    }
+    if (!safe && settings.maintenance.active) return error(reply, 503, 'maintenance_mode', settings.maintenance.message ?? '服务维护中，请稍后重试。')
+    if (path === '/v1/auth/wechat' && !settings.features.wechatLogin) return error(reply, 503, 'feature_disabled', '微信登录暂时不可用。')
+    if (!settings.features.accountSync && !safe && (path === '/v1/sync' || path === '/v1/training-completions')) return error(reply, 503, 'sync_paused', '同步暂时暂停，本机数据会稍后重试。')
+    if (!settings.features.aiEvaluation && !safe && path.startsWith('/v1/ai/')) return error(reply, 503, 'ai_unavailable', 'AI 点评暂时不可用。')
+    if (!settings.features.feedback && path === '/v1/feedback' && request.method === 'POST') return error(reply, 503, 'feature_disabled', '意见反馈暂时不可用。')
   })
 
   const aiProvider = options.aiProvider ?? (options.ai ? createDeepseekProvider(options.ai.apiKey, options.ai.baseUrl) : undefined)
@@ -562,7 +618,10 @@ export function createApp(options: CreateAppOptions) {
     return reply.send({ data: { accepted, duplicates: reports.length - accepted } })
   })
 
-  registerAdminRoutes(app, database, options.admin, { provider: aiProvider, configured: Boolean(options.ai || options.aiProvider), runtimeMetrics })
+  registerAdminRoutes(app, database, options.admin, {
+    provider: aiProvider, configured: Boolean(options.ai || options.aiProvider), runtimeMetrics,
+    runtimeConfig, runtime,
+  })
 
   return app
 }

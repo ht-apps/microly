@@ -24,6 +24,10 @@ import {
   SyncRequestSchema,
   TrainingCompletionSchema,
   ContentQualityIssueUpdateRequestSchema,
+  RuntimeConfigResponseSchema,
+  AdminRuntimeConfigUpdateRequestSchema,
+  AdminDeploymentListResponseSchema,
+  AdminBackupListResponseSchema,
 } from './index'
 
 const event = {
@@ -44,6 +48,23 @@ const event = {
 } as const
 
 describe('API contract', () => {
+  it('严格校验运行配置、部署和备份响应', () => {
+    const runtime = { data: {
+      revision: 1, environment: 'production', apiVersion: '1.0.0', minimumSupportedVersion: '1.0.0',
+      maintenance: { active: false, message: null },
+      features: { wechatLogin: true, accountSync: true, aiEvaluation: false, feedback: true },
+      serverTime: '2026-07-24T10:00:00.000Z',
+    } }
+    expect(RuntimeConfigResponseSchema.safeParse(runtime).success).toBe(true)
+    expect(RuntimeConfigResponseSchema.safeParse({ data: { ...runtime.data, token: 'secret' } }).success).toBe(false)
+    expect(AdminRuntimeConfigUpdateRequestSchema.safeParse({ ...runtime.data, reason: '封测维护', environment: undefined, apiVersion: undefined, serverTime: undefined }).success).toBe(false)
+    expect(AdminRuntimeConfigUpdateRequestSchema.safeParse({
+      revision: 1, minimumSupportedVersion: '1.0.0', maintenance: { active: true, message: '正在维护' },
+      features: runtime.data.features, reason: '执行数据库维护',
+    }).success).toBe(true)
+    expect(AdminDeploymentListResponseSchema.safeParse({ data: { items: [] } }).success).toBe(true)
+    expect(AdminBackupListResponseSchema.safeParse({ data: { items: [] } }).success).toBe(true)
+  })
   it('严格校验内容生产任务和训练审核', () => {
     const outlineRequest = {
       requestId: '41111111-1111-4111-8111-111111111111', revision: 2, count: 2,
@@ -101,9 +122,9 @@ describe('API contract', () => {
     const value = { data: {
       window: '24h', generatedAt: '2026-07-23T10:00:00.000Z',
       services: { process: 'ok', database: 'ok', ai: 'disabled', content: 'ok', currentContentVersion: 2, activeModelId: null },
-      summary: { total: 1, unresolved: 1, affectedAccounts: 1, level: 'normal' },
+      summary: { total: 1, unresolved: 1, affectedAccounts: 1, pendingFeedback: 2, level: 'normal' },
       api: { requests: 10, errorRate: 0, latencyP50: 12, latencyP95: 30 },
-      daily: [], pages: [], versions: [],
+      daily: [], pages: [], versions: [], alerts: [],
       issues: [{ fingerprint: 'b'.repeat(64), category: 'runtime', severity: 'error', page: '/pages/training/index', errorCode: 'typeerror', count: 1, affectedAccounts: 1, firstSeenAt: '2026-07-23T10:00:00.000Z', lastSeenAt: '2026-07-23T10:00:00.000Z', status: 'new', internalNote: null }],
     } }
     expect(AdminOperationsResponseSchema.safeParse(value).success).toBe(true)

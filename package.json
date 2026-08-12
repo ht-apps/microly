@@ -29,7 +29,16 @@
     "build:admin": "pnpm build:packages && pnpm --filter @microly/admin build",
     "test": "pnpm build:packages && pnpm --recursive --if-present test",
     "typecheck": "pnpm build:packages && pnpm --recursive --if-present typecheck",
-    "preflight": "node scripts/preflight.mjs"
+    "preflight": "node scripts/preflight.mjs",
+    "prod:check": "node scripts/production-env-check.mjs",
+    "prod:up": "docker compose --env-file .env.production -f compose.production.yml up -d",
+    "prod:down": "docker compose --env-file .env.production -f compose.production.yml down",
+    "prod:release": "bash scripts/release-production.sh",
+    "prod:build:miniapp": "node --env-file=.env.production scripts/build-miniapp-production.mjs",
+    "prod:rollback": "bash scripts/rollback-production.sh",
+    "prod:backup": "docker compose --env-file .env.production -f compose.production.yml run --rm -e BACKUP_ONCE=true -e BACKUP_KIND=manual backup",
+    "prod:backup:status": "bash scripts/backup-status.sh",
+    "prod:restore:test": "bash scripts/restore-production-test.sh"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

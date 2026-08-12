@@ -22,6 +22,9 @@ import {
   AdminContentReadinessResponseSchema,
   AdminContentReviewListResponseSchema,
   AdminContentReviewResponseSchema,
+  RuntimeConfigResponseSchema,
+  AdminDeploymentListResponseSchema,
+  AdminBackupListResponseSchema,
   type AdminContentDraft,
   type AdminContentGenerationJob,
   type AdminContentIndex,
@@ -39,6 +42,9 @@ import {
   type AdminLearningQuality,
   type ContentQualityIssue,
   type AdminSessionOutline,
+  type RuntimeConfig,
+  type AdminDeployment,
+  type AdminBackup,
 } from '@microly/api-contract'
 
 const TOKEN_KEY = 'microly:admin-token'
@@ -185,6 +191,21 @@ export const adminApi = {
   ),
   getOperations: (token: string, window: '1h' | '24h' | '7d') => adminRequest<AdminOperations>(
     `/v1/admin/operations?window=${window}`, token, { schema: AdminOperationsResponseSchema },
+  ),
+  getRuntimeConfig: (token: string) => adminRequest<RuntimeConfig>(
+    '/v1/admin/runtime-config', token, { schema: RuntimeConfigResponseSchema },
+  ),
+  updateRuntimeConfig: (token: string, input: {
+    revision: number; minimumSupportedVersion: string; maintenance: RuntimeConfig['maintenance'];
+    features: RuntimeConfig['features']; reason: string;
+  }) => adminRequest<RuntimeConfig>(
+    '/v1/admin/runtime-config', token, { ...json('PUT', input), schema: RuntimeConfigResponseSchema },
+  ),
+  getDeployments: (token: string) => adminRequest<{ items: AdminDeployment[] }>(
+    '/v1/admin/deployments', token, { schema: AdminDeploymentListResponseSchema },
+  ),
+  getBackups: (token: string) => adminRequest<{ items: AdminBackup[] }>(
+    '/v1/admin/backups', token, { schema: AdminBackupListResponseSchema },
   ),
   updateClientError: (token: string, fingerprint: string, status: 'new' | 'in_progress' | 'resolved', internalNote: string | null) => adminRequest(
     `/v1/admin/operations/errors/${fingerprint}`, token,

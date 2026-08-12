@@ -25,5 +25,6 @@ declare namespace NodeJS {
     TARO_APP_ID: string
     /** 本地 API 地址；留空时保持纯本地模式 */
     TARO_APP_API_BASE_URL?: string
+    TARO_APP_VERSION?: string
   }
 }

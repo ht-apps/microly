@@ -348,5 +348,49 @@ export const clientErrorReports = pgTable('client_error_reports', {
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
 })
 
+export const runtimeSettings = pgTable('runtime_settings', {
+  singleton: boolean('singleton').primaryKey().default(true),
+  revision: integer('revision').notNull().default(1),
+  minimumSupportedVersion: varchar('minimum_supported_version', { length: 40 }).notNull().default('1.0.0'),
+  maintenanceActive: boolean('maintenance_active').notNull().default(false),
+  maintenanceMessage: varchar('maintenance_message', { length: 200 }),
+  features: jsonb('features').$type<{ wechatLogin: boolean; accountSync: boolean; aiEvaluation: boolean; feedback: boolean }>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
+export const deploymentReleases = pgTable('deployment_releases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  appVersion: varchar('app_version', { length: 40 }).notNull(),
+  gitCommit: varchar('git_commit', { length: 40 }).notNull(),
+  imageTag: varchar('image_tag', { length: 100 }).notNull(),
+  migrationVersion: text('migration_version'),
+  contentVersion: integer('content_version'),
+  status: varchar('status', { length: 20 }).$type<'deploying' | 'healthy' | 'failed' | 'rolled_back'>().notNull(),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+})
+
+export const databaseBackups = pgTable('database_backups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  filename: varchar('filename', { length: 200 }).notNull().unique(),
+  kind: varchar('kind', { length: 20 }).$type<'scheduled' | 'pre_release' | 'manual'>().notNull(),
+  status: varchar('status', { length: 20 }).$type<'running' | 'succeeded' | 'failed'>().notNull(),
+  sizeBytes: integer('size_bytes'),
+  checksum: varchar('checksum', { length: 64 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  restoreVerifiedAt: timestamp('restore_verified_at', { withTimezone: true }),
+})
+
+export const runtimeAlertStates = pgTable('runtime_alert_states', {
+  alertKey: varchar('alert_key', { length: 100 }).primaryKey(),
+  level: varchar('level', { length: 20 }).$type<'attention' | 'critical'>().notNull(),
+  active: boolean('active').notNull().default(true),
+  lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+  recoveredAt: timestamp('recovered_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+})
+
 export type StoredTrainingCompletion = typeof trainingCompletions.$inferSelect
 export type NewTrainingCompletion = TrainingCompletion

@@ -19,6 +19,7 @@ import { createSecureUuid } from '../network/identifier'
 import { readAllTrainingProgress, readTrainingProgress, writeTrainingProgress } from '../training/training-storage'
 import { clearFullSyncPending } from './sync-pending'
 import { trackEvent } from '../analytics/analytics-client'
+import { canUseNetworkFeature } from '../network/runtime-config'
 
 export const LAST_SYNC_STORAGE_KEY = 'microly:sync:last-success:v1'
 const SYNC_REQUEST_ID_KEY = 'microly:sync:request-id:v1'
@@ -103,6 +104,7 @@ export function applySyncSnapshot(value: SyncSnapshot) {
 }
 
 export async function flushFullSync(force = false) {
+  if (!canUseNetworkFeature('accountSync')) return false
   try {
     const retry = Taro.getStorageSync<{ attempts?: number; nextAttemptAt?: number }>(SYNC_RETRY_KEY)
     if (!force && retry?.nextAttemptAt && retry.nextAttemptAt > Date.now()) return false
@@ -129,6 +131,7 @@ export async function flushFullSync(force = false) {
 }
 
 export async function pullFullSync() {
+  if (!canUseNetworkFeature('accountSync')) return false
   try {
     const response = await authorizedRequest<unknown>({ path: '/v1/sync', method: 'GET' })
     const parsed = SyncResponseSchema.safeParse(response?.data)

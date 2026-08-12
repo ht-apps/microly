@@ -900,6 +900,7 @@ export const AdminOperationsResponseSchema = z.object({ data: z.object({
     total: z.number().int().nonnegative(),
     unresolved: z.number().int().nonnegative(),
     affectedAccounts: z.number().int().nonnegative(),
+    pendingFeedback: z.number().int().nonnegative(),
     level: z.enum(['normal', 'attention', 'critical']),
   }).strict(),
   api: z.object({
@@ -911,6 +912,12 @@ export const AdminOperationsResponseSchema = z.object({ data: z.object({
   daily: z.array(z.object({ time: z.string(), warnings: z.number().int().nonnegative(), errors: z.number().int().nonnegative(), fatals: z.number().int().nonnegative() }).strict()),
   pages: z.array(z.object({ page: z.string(), count: z.number().int().nonnegative() }).strict()).max(10),
   versions: z.array(z.object({ appVersion: z.string(), count: z.number().int().nonnegative() }).strict()).max(10),
+  alerts: z.array(z.object({
+    key: z.string().min(1).max(100),
+    level: z.enum(['attention', 'critical']),
+    lastSentAt: IsoTimeSchema.nullable(),
+    updatedAt: IsoTimeSchema,
+  }).strict()).max(50),
   issues: z.array(AdminOperationsIssueSchema).max(100),
 }).strict() }).strict()
 export const AdminClientErrorUpdateRequestSchema = z.object({
@@ -921,6 +928,70 @@ export const AdminClientErrorUpdateResponseSchema = z.object({ data: z.object({
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   status: AdminClientErrorStatusSchema,
   internalNote: z.string().nullable(),
+}).strict() }).strict()
+
+export const RuntimeFeatureFlagsSchema = z.object({
+  wechatLogin: z.boolean(),
+  accountSync: z.boolean(),
+  aiEvaluation: z.boolean(),
+  feedback: z.boolean(),
+}).strict()
+
+export const RuntimeConfigSchema = z.object({
+  revision: z.number().int().positive(),
+  environment: z.enum(['development', 'test', 'production']),
+  apiVersion: z.string().min(1).max(40),
+  minimumSupportedVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  maintenance: z.object({ active: z.boolean(), message: z.string().max(200).nullable() }).strict(),
+  features: RuntimeFeatureFlagsSchema,
+  serverTime: IsoTimeSchema,
+}).strict()
+
+export const RuntimeConfigResponseSchema = z.object({ data: RuntimeConfigSchema }).strict()
+
+export const AdminRuntimeConfigUpdateRequestSchema = z.object({
+  revision: z.number().int().positive(),
+  minimumSupportedVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  maintenance: z.object({ active: z.boolean(), message: z.string().trim().max(200).nullable() }).strict(),
+  features: RuntimeFeatureFlagsSchema,
+  reason: z.string().trim().min(2).max(200),
+}).strict().superRefine((value, context) => {
+  if (value.maintenance.active && !value.maintenance.message) {
+    context.addIssue({ code: 'custom', path: ['maintenance', 'message'], message: '维护模式需要填写提示。' })
+  }
+})
+
+export const AdminDeploymentSchema = z.object({
+  id: z.uuid(),
+  appVersion: z.string().min(1).max(40),
+  gitCommit: z.string().regex(/^[a-f0-9]{7,40}$/),
+  imageTag: z.string().min(1).max(100),
+  migrationVersion: z.string().nullable(),
+  contentVersion: z.number().int().positive().nullable(),
+  status: z.enum(['deploying', 'healthy', 'failed', 'rolled_back']),
+  reason: z.string().nullable(),
+  createdAt: IsoTimeSchema,
+  completedAt: IsoTimeSchema.nullable(),
+}).strict()
+
+export const AdminDeploymentListResponseSchema = z.object({ data: z.object({
+  items: z.array(AdminDeploymentSchema).max(100),
+}).strict() }).strict()
+
+export const AdminBackupSchema = z.object({
+  id: z.uuid(),
+  filename: z.string().min(1).max(200),
+  kind: z.enum(['scheduled', 'pre_release', 'manual']),
+  status: z.enum(['running', 'succeeded', 'failed']),
+  sizeBytes: z.number().int().nonnegative().nullable(),
+  checksum: z.string().regex(/^[a-f0-9]{64}$/).nullable(),
+  createdAt: IsoTimeSchema,
+  completedAt: IsoTimeSchema.nullable(),
+  restoreVerifiedAt: IsoTimeSchema.nullable(),
+}).strict()
+
+export const AdminBackupListResponseSchema = z.object({ data: z.object({
+  items: z.array(AdminBackupSchema).max(100),
 }).strict() }).strict()
 
 export type TrainingCompletion = z.infer<typeof TrainingCompletionSchema>
@@ -957,3 +1028,7 @@ export type AdminContentIndex = z.infer<typeof AdminContentIndexResponseSchema>[
 export type AdminDraftValidation = z.infer<typeof AdminDraftValidationResponseSchema>['data']
 export type AdminFeedbackList = z.infer<typeof AdminFeedbackListResponseSchema>['data']
 export type AdminOperations = z.infer<typeof AdminOperationsResponseSchema>['data']
+export type RuntimeConfig = z.infer<typeof RuntimeConfigSchema>
+export type RuntimeFeatureFlags = z.infer<typeof RuntimeFeatureFlagsSchema>
+export type AdminDeployment = z.infer<typeof AdminDeploymentSchema>
+export type AdminBackup = z.infer<typeof AdminBackupSchema>
